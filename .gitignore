@@ -1,1 +1,3 @@
-# nothing yet
+.hugo_build.lock
+public
+themes
