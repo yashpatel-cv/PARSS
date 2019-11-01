@@ -78,7 +78,7 @@ declare ROOT_PARTITION=""
 declare HOME_PARTITION=""
 declare ROOT_CRYPT="/dev/mapper/root_crypt"
 declare MOUNT_ROOT="/mnt/root"
-declare ROOT_SIZE_GB=180
+declare ROOT_SIZE_GB=50
 declare HOME_SIZE_GB=0
 declare AVAILABLE_SPACE_GB=0
 
