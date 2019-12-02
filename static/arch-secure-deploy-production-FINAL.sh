@@ -30,7 +30,7 @@
 #   - Arch Linux ISO (fresh install environment)
 #   - UEFI firmware
 #   - Network connectivity (Wi-Fi or Ethernet)
-#   - Minimum 70GB storage (170-190GB root + home)
+#   - Minimum 50GB storage (170-190GB root + home)
 #   - Root privilege execution
 #
 # Installation Phases:
@@ -437,8 +437,8 @@ prompt_partition_size() {
             continue
         fi
         
-        if [[ $HOME_SIZE_GB -lt 50 ]]; then
-            log_warn "Home partition must be at least 50GB (${HOME_SIZE_GB}GB remaining)"
+        if [[ $HOME_SIZE_GB -lt 20 ]]; then
+            log_warn "Home partition must be at least 20GB (${HOME_SIZE_GB}GB remaining)"
             continue
         fi
         
