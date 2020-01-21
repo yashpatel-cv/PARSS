@@ -1165,13 +1165,21 @@ phase_5_btrfs_filesystem() {
     
     local root_crypt_device="/dev/mapper/$LUKS_ROOT_NAME"
     
+    # ═══════════════════════════════════════════════════════════
+    # CREATE BTRFS FILESYSTEM
+    # ═══════════════════════════════════════════════════════════
+    
     log_info "Creating BTRFS filesystem on encrypted root volume..."
     execute_cmd "mkfs.btrfs -f -L root_encrypted $root_crypt_device" \
         "Formatting $root_crypt_device with BTRFS" true
     
-    log_info "Mounting BTRFS root..."
+    log_info "Mounting BTRFS root (temporary)..."
     mkdir -p "$MOUNT_ROOT"
     execute_cmd "mount $root_crypt_device $MOUNT_ROOT" "Mounting BTRFS root" true
+    
+    # ═══════════════════════════════════════════════════════════
+    # CREATE SUBVOLUMES
+    # ═══════════════════════════════════════════════════════════
     
     log_info "Creating BTRFS subvolume hierarchy..."
     
@@ -1186,36 +1194,107 @@ phase_5_btrfs_filesystem() {
         log_success "@log subvolume created for systemd journal"
     fi
     
+    # ═══════════════════════════════════════════════════════════
+    # PREPARE FOR REMOUNTING
+    # ═══════════════════════════════════════════════════════════
+    
     log_info "Remounting with optimized mount options..."
     execute_cmd "umount $MOUNT_ROOT" "Unmounting temporary mount" true
     
-    execute_cmd "mount -o subvol=@,compress=zstd,noatime,space_cache=v2,nodev,nosuid,noexec $root_crypt_device $MOUNT_ROOT" \
-        "Mounting @ subvolume with optimization flags" true
+    # ═══════════════════════════════════════════════════════════
+    # CREATE ALL MOUNT POINT DIRECTORIES (BEFORE MOUNTING)
+    # This is CRITICAL - directories must exist before mount
+    # ═══════════════════════════════════════════════════════════
     
+    log_info "Creating mount point directories..."
     mkdir -p "$MOUNT_ROOT"/{home,var,var/cache,.snapshots,boot}
     
+    # Only create /var/log if @log subvolume is enabled
     if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
         mkdir -p "$MOUNT_ROOT/var/log"
     fi
     
-    execute_cmd "mount -o subvol=@home,compress=zstd,noatime,space_cache=v2 $root_crypt_device $MOUNT_ROOT/home" \
-        "Mounting @home subvolume" true
+    # ═══════════════════════════════════════════════════════════
+    # MOUNT SUBVOLUMES (WITH PROPER QUOTING)
+    # Use single quotes around subvolume names to prevent
+    # shell interpretation of special characters (@, -, etc)
+    # ═══════════════════════════════════════════════════════════
     
-    execute_cmd "mount -o subvol=@var,compress=zstd,noatime,space_cache=v2,nodev,nosuid $root_crypt_device $MOUNT_ROOT/var" \
-        "Mounting @var subvolume" true
+    # Mount root (@) with security flags
+    log_info "Mounting @ (root) subvolume..."
+    if ! mount -o "subvol='@',compress=zstd,noatime,space_cache=v2,nodev,nosuid,noexec" \
+        "$root_crypt_device" "$MOUNT_ROOT" >> "$LOG_FILE" 2>&1; then
+        log_error "Failed to mount @ subvolume"
+        log_error "Mount command: mount -o subvol='@',compress=zstd,... $root_crypt_device $MOUNT_ROOT"
+        lsblk "$TARGET_DEVICE" | tee -a "$LOG_FILE"
+        return 1
+    fi
+    log_success "@ subvolume mounted at $MOUNT_ROOT"
     
-    execute_cmd "mount -o subvol=@varcache,compress=zstd,noatime,space_cache=v2,nodev,nosuid $root_crypt_device $MOUNT_ROOT/var/cache" \
-        "Mounting @varcache subvolume" true
+    # Mount home (@home)
+    log_info "Mounting @home subvolume..."
+    if ! mount -o "subvol='@home',compress=zstd,noatime,space_cache=v2" \
+        "$root_crypt_device" "$MOUNT_ROOT/home" >> "$LOG_FILE" 2>&1; then
+        log_error "Failed to mount @home subvolume"
+        log_error "Mount command: mount -o subvol='@home',... $root_crypt_device $MOUNT_ROOT/home"
+        return 1
+    fi
+    log_success "@home subvolume mounted at $MOUNT_ROOT/home"
     
-    execute_cmd "mount -o subvol=@snapshots,compress=zstd,noatime,space_cache=v2,nodev,nosuid $root_crypt_device $MOUNT_ROOT/.snapshots" \
-        "Mounting @snapshots subvolume" true
+    # Mount var (@var)
+    log_info "Mounting @var subvolume..."
+    if ! mount -o "subvol='@var',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+        "$root_crypt_device" "$MOUNT_ROOT/var" >> "$LOG_FILE" 2>&1; then
+        log_error "Failed to mount @var subvolume"
+        log_error "Mount command: mount -o subvol='@var',... $root_crypt_device $MOUNT_ROOT/var"
+        return 1
+    fi
+    log_success "@var subvolume mounted at $MOUNT_ROOT/var"
     
+    # Mount varcache (@varcache)
+    log_info "Mounting @varcache subvolume..."
+    if ! mount -o "subvol='@varcache',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+        "$root_crypt_device" "$MOUNT_ROOT/var/cache" >> "$LOG_FILE" 2>&1; then
+        log_error "Failed to mount @varcache subvolume"
+        log_error "Mount command: mount -o subvol='@varcache',... $root_crypt_device $MOUNT_ROOT/var/cache"
+        return 1
+    fi
+    log_success "@varcache subvolume mounted at $MOUNT_ROOT/var/cache"
+    
+    # Mount snapshots (@snapshots)
+    log_info "Mounting @snapshots subvolume..."
+    if ! mount -o "subvol='@snapshots',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+        "$root_crypt_device" "$MOUNT_ROOT/.snapshots" >> "$LOG_FILE" 2>&1; then
+        log_error "Failed to mount @snapshots subvolume"
+        log_error "Mount command: mount -o subvol='@snapshots',... $root_crypt_device $MOUNT_ROOT/.snapshots"
+        return 1
+    fi
+    log_success "@snapshots subvolume mounted at $MOUNT_ROOT/.snapshots"
+    
+    # Mount log (@log) - ONLY if ADD_LOG_SUBVOLUME is true
     if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
-        execute_cmd "mount -o subvol=@log,compress=zstd,noatime,space_cache=v2,nodev,nosuid $root_crypt_device $MOUNT_ROOT/var/log" \
-            "Mounting @log subvolume" true
+        log_info "Mounting @log subvolume..."
+        if ! mount -o "subvol='@log',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+            "$root_crypt_device" "$MOUNT_ROOT/var/log" >> "$LOG_FILE" 2>&1; then
+            log_error "Failed to mount @log subvolume"
+            log_error "Mount command: mount -o subvol='@log',... $root_crypt_device $MOUNT_ROOT/var/log"
+            log_error "Note: Ensure /mnt/root/var/log directory exists"
+            return 1
+        fi
+        log_success "@log subvolume mounted at $MOUNT_ROOT/var/log"
     fi
     
-    execute_cmd "mount $BOOT_PARTITION $MOUNT_ROOT/boot" "Mounting EFI System Partition" true
+    # Mount EFI partition
+    log_info "Mounting EFI System Partition..."
+    if ! mount "$BOOT_PARTITION" "$MOUNT_ROOT/boot" >> "$LOG_FILE" 2>&1; then
+        log_error "Failed to mount $BOOT_PARTITION to $MOUNT_ROOT/boot"
+        return 1
+    fi
+    log_success "EFI partition mounted at $MOUNT_ROOT/boot"
+    
+    # ═══════════════════════════════════════════════════════════
+    # VERIFY MOUNT CONFIGURATION
+    # ═══════════════════════════════════════════════════════════
     
     log_info "Verifying BTRFS mount configuration..."
     mount | grep "$MOUNT_ROOT" | tee -a "$LOG_FILE"
@@ -1321,38 +1400,102 @@ EOF
 phase_8_chroot_configuration() {
     log_section "PHASE 8: CHROOT ENVIRONMENT & BOOTLOADER"
     
+    # ═══════════════════════════════════════════════════════════
+    # CONFIGURE MKINITCPIO
+    # ═══════════════════════════════════════════════════════════
+    
     log_info "Configuring mkinitcpio for encrypted root..."
     
     local mkinitcpio_conf="$MOUNT_ROOT/etc/mkinitcpio.conf"
+    
+    # Backup original
     cp "$mkinitcpio_conf" "${mkinitcpio_conf}.bak"
     
-    # CRITICAL FIX: Only btrfs module needed, removed dm_crypt
+    # Update MODULES - only btrfs needed (dm_crypt auto-loaded by encrypt hook)
     sed -i 's/^MODULES=.*/MODULES=(btrfs)/' "$mkinitcpio_conf"
     
-    # CRITICAL FIX: Use 'encrypt' not 'sd-encrypt', correct order
+    # Update HOOKS - traditional encrypt hook with proper order
     sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect modconf kms keyboard keymap consolefont block encrypt filesystems fsck)/' "$mkinitcpio_conf"
     
     log_info "Updated mkinitcpio configuration:"
     grep -E "^(MODULES|HOOKS)" "$mkinitcpio_conf" | tee -a "$LOG_FILE"
     
+    # ═══════════════════════════════════════════════════════════
+    # GENERATE INITRAMFS (FIXED - Handle bash not found)
+    # ═══════════════════════════════════════════════════════════
+    
     log_info "Generating initramfs (mkinitcpio -p linux-zen)..."
     
-    if ! arch-chroot "$MOUNT_ROOT" bash -c "mkinitcpio -p linux-zen" 2>&1 | tee -a "$LOG_FILE"; then
-        log_error "Initramfs generation failed"
+    # METHOD 1: Try arch-chroot (recommended, handles environment setup)
+    if arch-chroot "$MOUNT_ROOT" mkinitcpio -p linux-zen 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "Initramfs generated via arch-chroot"
+    else
+        local arch_chroot_exit=$?
+        log_warn "arch-chroot mkinitcpio failed (exit code: $arch_chroot_exit)"
+        log_info "Attempting fallback method with /bin/sh..."
+        
+        # METHOD 2: Fallback - use chroot directly with /bin/sh
+        # This avoids the bash permission issue
+        if chroot "$MOUNT_ROOT" /bin/sh -c "mkinitcpio -p linux-zen" 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "Initramfs generated via chroot /bin/sh"
+        else
+            local chroot_exit=$?
+            log_error "chroot mkinitcpio also failed (exit code: $chroot_exit)"
+            log_error "Initramfs generation failed - cannot proceed"
+            return 1
+        fi
+    fi
+    
+    # ═══════════════════════════════════════════════════════════
+    # VERIFY INITRAMFS WAS CREATED
+    # ═══════════════════════════════════════════════════════════
+    
+    if [[ ! -f "$MOUNT_ROOT/boot/initramfs-linux-zen.img" ]]; then
+        log_error "initramfs-linux-zen.img not found after mkinitcpio"
+        log_error "Expected location: $MOUNT_ROOT/boot/initramfs-linux-zen.img"
+        log_error "Boot directory contents:"
+        ls -la "$MOUNT_ROOT/boot/" | tee -a "$LOG_FILE"
         return 1
     fi
     
-    log_success "Initramfs generated successfully"
+    local initramfs_size
+    initramfs_size=$(stat -c%s "$MOUNT_ROOT/boot/initramfs-linux-zen.img")
+    log_success "Initramfs file verified (size: ${initramfs_size} bytes)"
+    
+    # ═══════════════════════════════════════════════════════════
+    # INSTALL GRUB BOOTLOADER
+    # ═══════════════════════════════════════════════════════════
     
     log_info "Installing GRUB to EFI System Partition..."
     
-    if ! arch-chroot "$MOUNT_ROOT" grub-install \
+    # METHOD 1: Standard GRUB install
+    if arch-chroot "$MOUNT_ROOT" grub-install \
         --target=x86_64-efi \
         --efi-directory=/boot \
         --bootloader-id=GRUB 2>&1 | tee -a "$LOG_FILE"; then
-        log_error "GRUB installation failed"
-        return 1
+        log_success "GRUB installed successfully"
+    else
+        local grub_exit=$?
+        log_warn "Standard GRUB install failed (exit code: $grub_exit)"
+        log_info "Attempting GRUB install with --removable flag..."
+        
+        # METHOD 2: Fallback - use --removable flag
+        # This creates a fallback boot path that works on more systems
+        if arch-chroot "$MOUNT_ROOT" grub-install \
+            --target=x86_64-efi \
+            --efi-directory=/boot \
+            --bootloader-id=GRUB \
+            --removable 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "GRUB installed with --removable flag"
+        else
+            log_error "GRUB installation failed with all methods"
+            return 1
+        fi
     fi
+    
+    # ═══════════════════════════════════════════════════════════
+    # CONFIGURE GRUB FOR ENCRYPTED ROOT
+    # ═══════════════════════════════════════════════════════════
     
     log_info "Configuring GRUB kernel parameters for encrypted root..."
     
@@ -1360,19 +1503,51 @@ phase_8_chroot_configuration() {
     local root_uuid
     root_uuid=$(blkid -s UUID -o value "$ROOT_PARTITION")
     
-    # CRITICAL FIX: Use cryptdevice=UUID not rd.luks.name for traditional encrypt hook
+    if [[ -z "$root_uuid" ]]; then
+        log_error "Could not retrieve UUID for $ROOT_PARTITION"
+        return 1
+    fi
+    
+    log_debug "Root partition UUID: $root_uuid"
+    
+    # Set GRUB kernel command line with LUKS parameters
+    # cryptdevice=UUID:mapper_name (traditional encrypt hook format)
     sed -i "/^GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX=\"cryptdevice=UUID=${root_uuid}:${LUKS_ROOT_NAME} root=/dev/mapper/${LUKS_ROOT_NAME} quiet\"" "$grub_default"
     
+    # Enable cryptodisk support in GRUB
     echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
     
     log_info "Updated GRUB configuration:"
     grep -E "^(GRUB_CMDLINE_LINUX|GRUB_ENABLE_CRYPTODISK)" "$grub_default" | tee -a "$LOG_FILE"
+    
+    # ═══════════════════════════════════════════════════════════
+    # GENERATE GRUB CONFIGURATION
+    # ═══════════════════════════════════════════════════════════
     
     log_info "Generating GRUB menu configuration..."
     
     if ! arch-chroot "$MOUNT_ROOT" grub-mkconfig -o /boot/grub/grub.cfg 2>&1 | tee -a "$LOG_FILE"; then
         log_error "GRUB configuration generation failed"
         return 1
+    fi
+    
+    log_success "GRUB configuration generated successfully"
+    
+    # ═══════════════════════════════════════════════════════════
+    # VERIFY GRUB CONFIGURATION
+    # ═══════════════════════════════════════════════════════════
+    
+    if [[ ! -f "$MOUNT_ROOT/boot/grub/grub.cfg" ]]; then
+        log_error "GRUB configuration file not found"
+        return 1
+    fi
+    
+    # Verify cryptdevice parameter is in grub.cfg
+    if ! grep -q "cryptdevice=" "$MOUNT_ROOT/boot/grub/grub.cfg"; then
+        log_warn "cryptdevice parameter not found in grub.cfg"
+        log_warn "This may cause boot issues"
+    else
+        log_success "cryptdevice parameter verified in grub.cfg"
     fi
     
     log_success "GRUB bootloader configured successfully"
