@@ -1223,10 +1223,10 @@ phase_5_btrfs_filesystem() {
     
     # Mount root (@) with security flags
     log_info "Mounting @ (root) subvolume..."
-    if ! mount -o "subvol='@',compress=zstd,noatime,space_cache=v2,nodev,nosuid,noexec" \
+    if ! mount -o "subvol=@,compress=zstd,noatime,space_cache=v2,nodev,nosuid,noexec" \
         "$root_crypt_device" "$MOUNT_ROOT" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @ subvolume"
-        log_error "Mount command: mount -o subvol='@',compress=zstd,... $root_crypt_device $MOUNT_ROOT"
+        log_error "Mount command: mount -o subvol=@,compress=zstd,... $root_crypt_device $MOUNT_ROOT"
         lsblk "$TARGET_DEVICE" | tee -a "$LOG_FILE"
         return 1
     fi
@@ -1234,40 +1234,40 @@ phase_5_btrfs_filesystem() {
     
     # Mount home (@home)
     log_info "Mounting @home subvolume..."
-    if ! mount -o "subvol='@home',compress=zstd,noatime,space_cache=v2" \
+    if ! mount -o "subvol=@home,compress=zstd,noatime,space_cache=v2" \
         "$root_crypt_device" "$MOUNT_ROOT/home" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @home subvolume"
-        log_error "Mount command: mount -o subvol='@home',... $root_crypt_device $MOUNT_ROOT/home"
+        log_error "Mount command: mount -o subvol=@home,... $root_crypt_device $MOUNT_ROOT/home"
         return 1
     fi
     log_success "@home subvolume mounted at $MOUNT_ROOT/home"
     
     # Mount var (@var)
     log_info "Mounting @var subvolume..."
-    if ! mount -o "subvol='@var',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+    if ! mount -o "subvol=@var,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
         "$root_crypt_device" "$MOUNT_ROOT/var" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @var subvolume"
-        log_error "Mount command: mount -o subvol='@var',... $root_crypt_device $MOUNT_ROOT/var"
+        log_error "Mount command: mount -o subvol=@var,... $root_crypt_device $MOUNT_ROOT/var"
         return 1
     fi
     log_success "@var subvolume mounted at $MOUNT_ROOT/var"
     
     # Mount varcache (@varcache)
     log_info "Mounting @varcache subvolume..."
-    if ! mount -o "subvol='@varcache',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+    if ! mount -o "subvol=@varcache,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
         "$root_crypt_device" "$MOUNT_ROOT/var/cache" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @varcache subvolume"
-        log_error "Mount command: mount -o subvol='@varcache',... $root_crypt_device $MOUNT_ROOT/var/cache"
+        log_error "Mount command: mount -o subvol=@varcache,... $root_crypt_device $MOUNT_ROOT/var/cache"
         return 1
     fi
     log_success "@varcache subvolume mounted at $MOUNT_ROOT/var/cache"
     
     # Mount snapshots (@snapshots)
     log_info "Mounting @snapshots subvolume..."
-    if ! mount -o "subvol='@snapshots',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+    if ! mount -o "subvol=@snapshots,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
         "$root_crypt_device" "$MOUNT_ROOT/.snapshots" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @snapshots subvolume"
-        log_error "Mount command: mount -o subvol='@snapshots',... $root_crypt_device $MOUNT_ROOT/.snapshots"
+        log_error "Mount command: mount -o subvol=@snapshots,... $root_crypt_device $MOUNT_ROOT/.snapshots"
         return 1
     fi
     log_success "@snapshots subvolume mounted at $MOUNT_ROOT/.snapshots"
@@ -1275,10 +1275,10 @@ phase_5_btrfs_filesystem() {
     # Mount log (@log) - ONLY if ADD_LOG_SUBVOLUME is true
     if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
         log_info "Mounting @log subvolume..."
-        if ! mount -o "subvol='@log',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+        if ! mount -o "subvol=@log,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
             "$root_crypt_device" "$MOUNT_ROOT/var/log" >> "$LOG_FILE" 2>&1; then
             log_error "Failed to mount @log subvolume"
-            log_error "Mount command: mount -o subvol='@log',... $root_crypt_device $MOUNT_ROOT/var/log"
+            log_error "Mount command: mount -o subvol=@log,... $root_crypt_device $MOUNT_ROOT/var/log"
             log_error "Note: Ensure /mnt/root/var/log directory exists"
             return 1
         fi
