@@ -1202,18 +1202,7 @@ phase_5_btrfs_filesystem() {
     log_info "Remounting with optimized mount options..."
     execute_cmd "umount $MOUNT_ROOT" "Unmounting temporary mount" true
     
-    # ═══════════════════════════════════════════════════════════
-    # CREATE ALL MOUNT POINT DIRECTORIES (BEFORE MOUNTING)
-    # This is CRITICAL - directories must exist before mount
-    # ═══════════════════════════════════════════════════════════
-    
-    log_info "Creating mount point directories..."
-    mkdir -p "$MOUNT_ROOT"/{home,var,var/cache,.snapshots,boot}
-    
-    # Only create /var/log if @log subvolume is enabled
-    if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
-        mkdir -p "$MOUNT_ROOT/var/log"
-    fi
+    # Directories will be created AFTER mounting root subvolume
     
     # ═══════════════════════════════════════════════════════════
     # MOUNT SUBVOLUMES (WITH PROPER QUOTING)
@@ -1231,6 +1220,18 @@ phase_5_btrfs_filesystem() {
         return 1
     fi
     log_success "@ subvolume mounted at $MOUNT_ROOT"
+    
+    # ═══════════════════════════════════════════════════════════
+    # CREATE MOUNT POINT DIRECTORIES (AFTER MOUNTING ROOT)
+    # ═══════════════════════════════════════════════════════════
+    
+    log_info "Creating mount point directories..."
+    mkdir -p "$MOUNT_ROOT"/{home,var,var/cache,.snapshots,boot}
+    
+    # Only create /var/log if @log subvolume is enabled
+    if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
+        mkdir -p "$MOUNT_ROOT/var/log"
+    fi
     
     # Mount home (@home)
     log_info "Mounting @home subvolume..."
