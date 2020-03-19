@@ -866,12 +866,15 @@ phase_2_device_configuration() {
 phase_3_disk_preparation() {
     log_section "PHASE 3: DISK WIPING & PARTITIONING (FIXED)"
     
+    log_info "Unmounting existing filesystems..."
+    umount -R /mnt/root 2>/dev/null || true
+    umount -R /mnt/arch-install 2>/dev/null || true
+    umount "${TARGET_DEVICE}"* 2>/dev/null || true
+    swapoff -a 2>/dev/null || true
+    
     log_info "Closing any existing LUKS volumes..."
     cryptsetup close "${LUKS_ROOT_NAME}" 2>/dev/null || true
     cryptsetup close "${LUKS_HOME_NAME}" 2>/dev/null || true
-    
-    log_info "Unmounting any existing partitions on $TARGET_DEVICE..."
-    umount "${TARGET_DEVICE}"* 2>/dev/null || true
     
     log_info "Wiping existing filesystem signatures from $TARGET_DEVICE..."
     execute_cmd "wipefs -af $TARGET_DEVICE" "Wiping all filesystem signatures" true
