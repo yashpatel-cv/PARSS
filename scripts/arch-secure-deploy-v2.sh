@@ -53,6 +53,13 @@
 # Author: Cybersecurity Research Team
 # Date: November 2025
 #
+# Enable strict error handling for pipelines
+set -o pipefail
+
+# Error trap for better debugging
+trap 'last_command=$current_command; current_command=$BASH_COMMAND' DEBUG
+trap 'echo "[ERROR] \"${last_command}\" command failed with exit code $? at line $LINENO"' ERR
+
 # Changes in v2.2:
 #   ✓ Root partition: 50GB minimum/default (was 180GB)
 #   ✓ Home partition: 20GB minimum (was no minimum)
