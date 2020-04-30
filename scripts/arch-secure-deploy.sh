@@ -53,6 +53,13 @@
 # Author: Cybersecurity Research Team
 # Date: November 2025
 #
+# Enable strict error handling for pipelines
+set -o pipefail
+
+# Error trap for better debugging
+trap 'last_command=$current_command; current_command=$BASH_COMMAND' DEBUG
+trap 'echo "[ERROR] \"${last_command}\" command failed with exit code $? at line $LINENO"' ERR
+
 # Changes in v2.2:
 #   ✓ Root partition: 50GB minimum/default (was 180GB)
 #   ✓ Home partition: 20GB minimum (was no minimum)
@@ -69,7 +76,7 @@
 #
 # Usage: sudo bash ./arch-secure-deploy-production-FINAL.sh
 #
-# Version: 2.3 (Critical Bug Fixes - Phase 3 & 4 partition/encryption errors)
+# Version: 2.4 (PAASS Enhanced - Reliability & Security Pillars)
 #
 # Bug Fixes in v2.3:
 #   ✓ Fixed partition creation alignment issues
@@ -136,6 +143,7 @@ declare SYSTEM_TIMEZONE="UTC"
 
 # === FEATURE FLAGS ===
 declare PERFORM_UPGRADE=true
+declare DRY_RUN=false
 
 # === RETRY CONFIGURATION ===
 readonly MAX_RETRIES=3
@@ -331,11 +339,12 @@ confirm_destructive_operation() {
     echo "  3. Type 'YES' to proceed"
     echo ""
     
-    read -p "Type 'YES' to confirm: " confirmation
+    read -p "Type 'y' or 'Y' to confirm: " confirmation
+    echo
     
-    if [[ "$confirmation" != "YES" ]]; then
-        log_warn "Confirmation failed. Operation cancelled."
-        exit 0
+    if [[ ! "$confirmation" =~ ^[yY]([eE][sS])?$ ]]; then
+        log_error "Operation cancelled by user"
+        exit 1
     fi
     
     log_success "Destructive operation confirmed for $device"
@@ -489,14 +498,15 @@ prompt_partition_size() {
         echo "  Total:                $((1 + ROOT_SIZE_GB + HOME_SIZE_GB))GB"
         echo ""
         
-        read -p "Is this configuration correct? (yes/no) [yes]: " confirm_partition
-        confirm_partition="${confirm_partition:-yes}"
+        read -p "Is this configuration correct? (y/n) [y]: " confirm_partition
+        confirm_partition=${confirm_partition:-y}
         
-        if [[ "$confirm_partition" == "yes" ]] || [[ "$confirm_partition" == "y" ]]; then
-            log_success "Partition configuration confirmed"
-            return 0
+        if [[ "$confirm_partition" =~ ^[yY]([eE][sS])?$ ]]; then
+            break
         fi
     done
+    log_success "Partition configuration confirmed"
+    return 0
 }
 
 # Check available disk space
@@ -743,11 +753,11 @@ phase_1b_interactive_configuration() {
     log_info "════════════════════════════════════════════════════════════"
     echo ""
     
-    read -p "Proceed with installation? (type 'YES' to confirm): " final_confirm
+    read -p "Proceed with installation? (type 'y' to confirm): " final_confirm
     
-    if [[ "$final_confirm" != "YES" ]]; then
-        log_warn "Installation cancelled by user"
-        exit 0
+    if [[ ! "$final_confirm" =~ ^[yY]([eE][sS])?$ ]]; then
+        log_error "Installation cancelled by user"
+        exit 1
     fi
     
     # SAVE CONFIGURATION TO STATE FILE
@@ -862,18 +872,62 @@ phase_2_device_configuration() {
 }
 
 ################################################################################
+# PRE-FLIGHT UNMOUNT ALL (CLEANUP BEFORE PHASE 3)
+################################################################################
+
+pre_flight_unmount_all() {
+    log_section "PRE-FLIGHT: UNMOUNT ALL BEFORE DISK PREPARATION"
+
+    log_info "Disabling all swap..."
+    swapoff -a 2>/dev/null || true
+
+    log_info "Unmounting any mounts under /mnt/*..."
+    for mount in /mnt/root /mnt/arch-install /mnt; do
+        if mountpoint -q "$mount" 2>/dev/null; then
+            log_info "Unmounting $mount (recursive)..."
+            umount -R "$mount" 2>/dev/null || umount -l "$mount" 2>/dev/null || true
+        fi
+    done
+
+    log_info "Unmounting any partitions of target device $TARGET_DEVICE..."
+    for part in "${TARGET_DEVICE}"*; do
+        if mountpoint -q "$part" 2>/dev/null; then
+            log_info "Unmounting $part..."
+            umount "$part" 2>/dev/null || umount -l "$part" 2>/dev/null || true
+        fi
+    done
+
+    log_info "Closing LUKS mappers that use $TARGET_DEVICE..."
+    for mapper in /dev/mapper/*; do
+        if [[ -b "$mapper" ]] && cryptsetup status "$(basename "$mapper")" 2>/dev/null | grep -q "$TARGET_DEVICE"; then
+            log_info "Closing LUKS mapper $(basename "$mapper")..."
+            cryptsetup close "$(basename "$mapper")" 2>/dev/null || true
+        fi
+    done
+
+    log_info "Verifying no mounts remain on $TARGET_DEVICE..."
+    if findmnt -n -o TARGET,SOURCE | grep -q "$TARGET_DEVICE"; then
+        log_error "Device $TARGET_DEVICE or its partitions are still mounted:"
+        findmnt -n -o TARGET,SOURCE | grep "$TARGET_DEVICE" | tee -a "$LOG_FILE"
+        log_error "Aborting. Please manually unmount and retry."
+        exit 1
+    fi
+
+    log_success "Pre-flight unmount completed successfully"
+}
+
+################################################################################
 # PHASE 3: DISK WIPING & PARTITIONING (CRITICAL FIXES)
 ################################################################################
 
 phase_3_disk_preparation() {
     log_section "PHASE 3: DISK WIPING & PARTITIONING (FIXED)"
     
-    log_info "Closing any existing LUKS volumes..."
+    pre_flight_unmount_all
+    
+    log_info "Closing any remaining LUKS volumes by name..."
     cryptsetup close "${LUKS_ROOT_NAME}" 2>/dev/null || true
     cryptsetup close "${LUKS_HOME_NAME}" 2>/dev/null || true
-    
-    log_info "Unmounting any existing partitions on $TARGET_DEVICE..."
-    umount "${TARGET_DEVICE}"* 2>/dev/null || true
     
     log_info "Wiping existing filesystem signatures from $TARGET_DEVICE..."
     execute_cmd "wipefs -af $TARGET_DEVICE" "Wiping all filesystem signatures" true
@@ -1000,8 +1054,8 @@ phase_4_luks_encryption() {
     echo -n "$luks_passphrase" > "$temp_keyfile_root"
     chmod 600 "$temp_keyfile_root"
     
-    # LUKS format with keyfile
-    if ! cryptsetup luksFormat \
+    # LUKS format with keyfile (piping YES to bypass strict confirmation)
+    if ! echo "YES" | cryptsetup luksFormat \
         --type luks2 \
         --pbkdf argon2id \
         --iter-time 5000 \
@@ -1091,8 +1145,8 @@ phase_4_luks_encryption() {
     echo -n "$luks_passphrase" > "$temp_keyfile_home"
     chmod 600 "$temp_keyfile_home"
     
-    # LUKS format
-    if ! cryptsetup luksFormat \
+    # LUKS format (piping YES to bypass strict confirmation)
+    if ! echo "YES" | cryptsetup luksFormat \
         --type luks2 \
         --pbkdf argon2id \
         --iter-time 5000 \
@@ -1206,18 +1260,7 @@ phase_5_btrfs_filesystem() {
     log_info "Remounting with optimized mount options..."
     execute_cmd "umount $MOUNT_ROOT" "Unmounting temporary mount" true
     
-    # ═══════════════════════════════════════════════════════════
-    # CREATE ALL MOUNT POINT DIRECTORIES (BEFORE MOUNTING)
-    # This is CRITICAL - directories must exist before mount
-    # ═══════════════════════════════════════════════════════════
-    
-    log_info "Creating mount point directories..."
-    mkdir -p "$MOUNT_ROOT"/{home,var,var/cache,.snapshots,boot}
-    
-    # Only create /var/log if @log subvolume is enabled
-    if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
-        mkdir -p "$MOUNT_ROOT/var/log"
-    fi
+    # Directories will be created AFTER mounting root subvolume
     
     # ═══════════════════════════════════════════════════════════
     # MOUNT SUBVOLUMES (WITH PROPER QUOTING)
@@ -1230,48 +1273,61 @@ phase_5_btrfs_filesystem() {
     if ! mount -o "subvol='@',compress=zstd,noatime,space_cache=v2" \
         "$root_crypt_device" "$MOUNT_ROOT" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @ subvolume"
-        log_error "Mount command: mount -o subvol='@',compress=zstd,... $root_crypt_device $MOUNT_ROOT"
+        log_error "Mount command: mount -o subvol=@,compress=zstd,... $root_crypt_device $MOUNT_ROOT"
         lsblk "$TARGET_DEVICE" | tee -a "$LOG_FILE"
         return 1
     fi
     log_success "@ subvolume mounted at $MOUNT_ROOT"
     
+    # ═══════════════════════════════════════════════════════════
+    # CREATE MOUNT POINT DIRECTORIES (AFTER MOUNTING ROOT)
+    # ═══════════════════════════════════════════════════════════
+    
+    log_info "Creating mount point directories..."
+    mkdir -p "$MOUNT_ROOT"/{home,var,.snapshots,boot}
+    
     # Mount home (@home)
     log_info "Mounting @home subvolume..."
-    if ! mount -o "subvol='@home',compress=zstd,noatime,space_cache=v2" \
+    if ! mount -o "subvol=@home,compress=zstd,noatime,space_cache=v2" \
         "$root_crypt_device" "$MOUNT_ROOT/home" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @home subvolume"
-        log_error "Mount command: mount -o subvol='@home',... $root_crypt_device $MOUNT_ROOT/home"
+        log_error "Mount command: mount -o subvol=@home,... $root_crypt_device $MOUNT_ROOT/home"
         return 1
     fi
     log_success "@home subvolume mounted at $MOUNT_ROOT/home"
     
     # Mount var (@var)
     log_info "Mounting @var subvolume..."
-    if ! mount -o "subvol='@var',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+    if ! mount -o "subvol=@var,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
         "$root_crypt_device" "$MOUNT_ROOT/var" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @var subvolume"
-        log_error "Mount command: mount -o subvol='@var',... $root_crypt_device $MOUNT_ROOT/var"
+        log_error "Mount command: mount -o subvol=@var,... $root_crypt_device $MOUNT_ROOT/var"
         return 1
     fi
     log_success "@var subvolume mounted at $MOUNT_ROOT/var"
     
+    # Create nested directories inside @var
+    mkdir -p "$MOUNT_ROOT/var/cache"
+    if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
+        mkdir -p "$MOUNT_ROOT/var/log"
+    fi
+    
     # Mount varcache (@varcache)
     log_info "Mounting @varcache subvolume..."
-    if ! mount -o "subvol='@varcache',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+    if ! mount -o "subvol=@varcache,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
         "$root_crypt_device" "$MOUNT_ROOT/var/cache" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @varcache subvolume"
-        log_error "Mount command: mount -o subvol='@varcache',... $root_crypt_device $MOUNT_ROOT/var/cache"
+        log_error "Mount command: mount -o subvol=@varcache,... $root_crypt_device $MOUNT_ROOT/var/cache"
         return 1
     fi
     log_success "@varcache subvolume mounted at $MOUNT_ROOT/var/cache"
     
     # Mount snapshots (@snapshots)
     log_info "Mounting @snapshots subvolume..."
-    if ! mount -o "subvol='@snapshots',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+    if ! mount -o "subvol=@snapshots,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
         "$root_crypt_device" "$MOUNT_ROOT/.snapshots" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @snapshots subvolume"
-        log_error "Mount command: mount -o subvol='@snapshots',... $root_crypt_device $MOUNT_ROOT/.snapshots"
+        log_error "Mount command: mount -o subvol=@snapshots,... $root_crypt_device $MOUNT_ROOT/.snapshots"
         return 1
     fi
     log_success "@snapshots subvolume mounted at $MOUNT_ROOT/.snapshots"
@@ -1279,10 +1335,10 @@ phase_5_btrfs_filesystem() {
     # Mount log (@log) - ONLY if ADD_LOG_SUBVOLUME is true
     if [[ "$ADD_LOG_SUBVOLUME" == "true" ]]; then
         log_info "Mounting @log subvolume..."
-        if ! mount -o "subvol='@log',compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
+        if ! mount -o "subvol=@log,compress=zstd,noatime,space_cache=v2,nodev,nosuid" \
             "$root_crypt_device" "$MOUNT_ROOT/var/log" >> "$LOG_FILE" 2>&1; then
             log_error "Failed to mount @log subvolume"
-            log_error "Mount command: mount -o subvol='@log',... $root_crypt_device $MOUNT_ROOT/var/log"
+            log_error "Mount command: mount -o subvol=@log,... $root_crypt_device $MOUNT_ROOT/var/log"
             log_error "Note: Ensure /mnt/root/var/log directory exists"
             return 1
         fi
