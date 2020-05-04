@@ -301,7 +301,7 @@ load_state() {
     fi
 }
 
-# Validate block device
+# Validate block device and offer to unmount if needed
 validate_block_device() {
     local device="$1"
     
@@ -309,9 +309,46 @@ validate_block_device() {
         return 1
     fi
     
-    if grep -q "$device" /proc/mounts; then
-        log_error "Device $device is currently mounted"
-        return 1
+    # Check if anything is mounted on this device or its partitions
+    local mounted_info
+    mounted_info=$(findmnt -n -o TARGET,SOURCE | grep "$device" || true)
+    
+    if [[ -n "$mounted_info" ]]; then
+        log_warn "Device $device or its partitions are currently mounted:"
+        echo "$mounted_info" | tee -a "$LOG_FILE"
+        echo ""
+        read -p "Attempt to auto-unmount and close LUKS on $device? (y/n) [y]: " auto_unmount
+        auto_unmount=${auto_unmount:-y}
+        if [[ "$auto_unmount" =~ ^[yY]([eE][sS])?$ ]]; then
+            log_info "Attempting to unmount $device and its partitions..."
+            swapoff -a 2>/dev/null || true
+            for part in "${device}"*; do
+                if mountpoint -q "$part" 2>/dev/null; then
+                    umount "$part" 2>/dev/null || umount -l "$part" 2>/dev/null || true
+                fi
+            done
+            for mount in /mnt/root /mnt/arch-install /mnt; do
+                if mountpoint -q "$mount" 2>/dev/null; then
+                    umount -R "$mount" 2>/dev/null || umount -l "$mount" 2>/dev/null || true
+                fi
+            done
+            # Close LUKS mappers using this device
+            for mapper in /dev/mapper/*; do
+                if [[ -b "$mapper" ]] && cryptsetup status "$(basename "$mapper")" 2>/dev/null | grep -q "$device"; then
+                    cryptsetup close "$(basename "$mapper")" 2>/dev/null || true
+                fi
+            done
+            # Re-check
+            if findmnt -n -o TARGET,SOURCE | grep -q "$device"; then
+                log_error "Failed to unmount $device. Please manually unmount and retry."
+                return 1
+            else
+                log_success "Device $device successfully unmounted."
+            fi
+        else
+            log_error "Device $device is mounted and you chose not to auto-unmount."
+            return 1
+        fi
     fi
     
     log_success "Block device $device validated"
