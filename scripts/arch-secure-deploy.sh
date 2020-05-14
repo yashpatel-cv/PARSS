@@ -306,12 +306,14 @@ validate_block_device() {
     local device="$1"
     
     if [[ ! -b "$device" ]]; then
+        log_error "Device $device is not a block device"
         return 1
     fi
     
     # Check if anything is mounted on this device or its partitions
     local mounted_info
     mounted_info=$(findmnt -n -o TARGET,SOURCE | grep "$device" || true)
+    log_debug "Mounted info for $device: '$mounted_info'"
     
     if [[ -n "$mounted_info" ]]; then
         log_warn "Device $device or its partitions are currently mounted:"
@@ -324,22 +326,28 @@ validate_block_device() {
             swapoff -a 2>/dev/null || true
             for part in "${device}"*; do
                 if mountpoint -q "$part" 2>/dev/null; then
+                    log_info "Unmounting $part..."
                     umount "$part" 2>/dev/null || umount -l "$part" 2>/dev/null || true
                 fi
             done
             for mount in /mnt/root /mnt/arch-install /mnt; do
                 if mountpoint -q "$mount" 2>/dev/null; then
+                    log_info "Unmounting $mount (recursive)..."
                     umount -R "$mount" 2>/dev/null || umount -l "$mount" 2>/dev/null || true
                 fi
             done
             # Close LUKS mappers using this device
             for mapper in /dev/mapper/*; do
                 if [[ -b "$mapper" ]] && cryptsetup status "$(basename "$mapper")" 2>/dev/null | grep -q "$device"; then
+                    log_info "Closing LUKS mapper $(basename "$mapper")..."
                     cryptsetup close "$(basename "$mapper")" 2>/dev/null || true
                 fi
             done
             # Re-check
-            if findmnt -n -o TARGET,SOURCE | grep -q "$device"; then
+            local remounted
+            remounted=$(findmnt -n -o TARGET,SOURCE | grep "$device" || true)
+            log_debug "Re-check mounted info for $device: '$remounted'"
+            if [[ -n "$remounted" ]]; then
                 log_error "Failed to unmount $device. Please manually unmount and retry."
                 return 1
             else
