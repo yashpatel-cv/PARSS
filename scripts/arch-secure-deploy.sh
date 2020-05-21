@@ -1315,11 +1315,13 @@ phase_5_btrfs_filesystem() {
     
     # Mount root (@) with security flags
     log_info "Mounting @ (root) subvolume..."
+    mkdir -p "$MOUNT_ROOT"
     if ! mount -o "subvol='@',compress=zstd,noatime,space_cache=v2" \
         "$root_crypt_device" "$MOUNT_ROOT" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @ subvolume"
         log_error "Mount command: mount -o subvol=@,compress=zstd,... $root_crypt_device $MOUNT_ROOT"
         lsblk "$TARGET_DEVICE" | tee -a "$LOG_FILE"
+        dmesg | tail -20 | tee -a "$LOG_FILE"
         return 1
     fi
     log_success "@ subvolume mounted at $MOUNT_ROOT"
