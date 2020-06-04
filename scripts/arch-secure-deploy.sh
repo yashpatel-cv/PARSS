@@ -1316,7 +1316,9 @@ phase_5_btrfs_filesystem() {
     # Mount root (@) with security flags
     log_info "Mounting @ (root) subvolume..."
     mkdir -p "$MOUNT_ROOT"
-    if ! mount -o "subvol='@',compress=zstd,noatime,space_cache=v2" \
+    log_debug "Verifying @ subvolume exists..."
+    btrfs subvolume list "$root_crypt_device" | grep -q " path @$" || { log_error "Subvolume @ not found"; return 1; }
+    if ! mount -o "subvol=@,compress=zstd,noatime,space_cache=v2" \
         "$root_crypt_device" "$MOUNT_ROOT" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @ subvolume"
         log_error "Mount command: mount -o subvol=@,compress=zstd,... $root_crypt_device $MOUNT_ROOT"
