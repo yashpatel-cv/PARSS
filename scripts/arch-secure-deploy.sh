@@ -859,29 +859,38 @@ phase_2_device_configuration() {
     
     echo ""
     
-    # Get user selection
-    while true; do
-        read -p "Select storage device (enter number 1-$((i-1))): " device_choice
-        
-        if [[ ! "$device_choice" =~ ^[0-9]+$ ]]; then
-            log_warn "Invalid input. Please enter a number."
-            continue
-        fi
-        
-        if [[ -z "${device_menu[$device_choice]}" ]]; then
-            log_warn "Invalid selection. Choose a number between 1 and $((i-1))."
-            continue
-        fi
-        
-        TARGET_DEVICE="${device_menu[$device_choice]}"
-        
+    # Get user selection (auto-select if only one device)
+    if [[ ${#devices[@]} -eq 1 ]]; then
+        TARGET_DEVICE="/dev/${devices[0]}"
+        log_info "Auto-selecting only available device: $TARGET_DEVICE"
         if ! validate_block_device "$TARGET_DEVICE"; then
-            log_warn "Invalid or mounted device: $TARGET_DEVICE"
-            continue
+            log_error "Device $TARGET_DEVICE failed validation"
+            return 1
         fi
-        
-        break
-    done
+    else
+        while true; do
+            read -p "Select storage device (enter number 1-$((i-1))): " device_choice
+            
+            if [[ ! "$device_choice" =~ ^[0-9]+$ ]]; then
+                log_warn "Invalid input. Please enter a number."
+                continue
+            fi
+            
+            if [[ -z "${device_menu[$device_choice]}" ]]; then
+                log_warn "Invalid selection. Choose a number between 1 and $((i-1))."
+                continue
+            fi
+            
+            TARGET_DEVICE="${device_menu[$device_choice]}"
+            
+            if ! validate_block_device "$TARGET_DEVICE"; then
+                log_warn "Invalid or mounted device: $TARGET_DEVICE"
+                continue
+            fi
+            
+            break
+        done
+    fi
     
     save_state "TARGET_DEVICE" "$TARGET_DEVICE"
     
@@ -982,7 +991,7 @@ phase_3_disk_preparation() {
     sync
     
     log_info "Creating new GPT partition table..."
-    execute_cmd "parted -s $TARGET_DEVICE mklabel gpt" "Creating GPT label" true
+    execute_cmd "parted -s $TARGET_DEVICE mklabel gpt" "Creating GPT label" true || { log_error "Failed to create GPT label"; return 1; }
     sync
     sleep 2
     
@@ -1316,8 +1325,6 @@ phase_5_btrfs_filesystem() {
     # Mount root (@) with security flags
     log_info "Mounting @ (root) subvolume..."
     mkdir -p "$MOUNT_ROOT"
-    log_debug "Verifying @ subvolume exists..."
-    btrfs subvolume list "$root_crypt_device" | grep -q " path @$" || { log_error "Subvolume @ not found"; return 1; }
     if ! mount -o "subvol=@,compress=zstd,noatime,space_cache=v2" \
         "$root_crypt_device" "$MOUNT_ROOT" >> "$LOG_FILE" 2>&1; then
         log_error "Failed to mount @ subvolume"
