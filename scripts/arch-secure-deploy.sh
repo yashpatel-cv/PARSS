@@ -991,7 +991,16 @@ phase_3_disk_preparation() {
     sync
     
     log_info "Creating new GPT partition table..."
-    execute_cmd "parted -s $TARGET_DEVICE mklabel gpt" "Creating GPT label" true || { log_error "Failed to create GPT label"; return 1; }
+    if ! parted -s "$TARGET_DEVICE" mklabel gpt >> "$LOG_FILE" 2>&1; then
+        log_warn "parted reported an error while creating GPT label; verifying partition table..."
+    fi
+
+    if ! parted -s "$TARGET_DEVICE" print 2>&1 | tee -a "$LOG_FILE" | grep -q "Partition Table: gpt"; then
+        log_error "Failed to create GPT label on $TARGET_DEVICE. Aborting."
+        return 1
+    fi
+
+    log_success "GPT label is present on $TARGET_DEVICE"
     sync
     sleep 2
     
