@@ -1006,8 +1006,12 @@ phase_3_disk_preparation() {
     
     log_info "Creating EFI System Partition (1GB)..."
     # Use percentage for better alignment
-    execute_cmd "parted -s -a optimal $TARGET_DEVICE mkpart ESP fat32 1MiB 1025MiB" "Creating ESP partition" true
-    execute_cmd "parted -s $TARGET_DEVICE set 1 esp on" "Setting ESP boot flag" true
+    if ! parted -s -a optimal "$TARGET_DEVICE" mkpart ESP fat32 1MiB 1025MiB >> "$LOG_FILE" 2>&1; then
+        log_warn "parted reported an error while creating ESP partition; final layout will be verified."
+    fi
+    if ! parted -s "$TARGET_DEVICE" set 1 esp on >> "$LOG_FILE" 2>&1; then
+        log_warn "parted reported an error while setting ESP boot flag; final layout will be verified."
+    fi
     sync
     sleep 1
     
@@ -1481,9 +1485,9 @@ phase_6_base_installation() {
     packages_str=$(IFS=' '; echo "${packages[*]}")
     
     log_info "Installing base packages via pacstrap (${#packages[@]} packages)..."
-    
-    if ! execute_cmd_retry "pacstrap -K $MOUNT_ROOT $packages_str" \
-        "Installing base system packages" 2; then
+    log_info "pacstrap output will show package progress; this may take several minutes..."
+
+    if ! pacstrap -K "$MOUNT_ROOT" $packages_str 2>&1 | tee -a "$LOG_FILE"; then
         log_error "Pacstrap installation failed"
         return 1
     fi
