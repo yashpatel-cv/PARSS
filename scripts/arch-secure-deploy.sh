@@ -1503,9 +1503,9 @@ phase_6_base_installation() {
     packages_str=$(IFS=' '; echo "${packages[*]}")
     
     log_info "Installing base packages via pacstrap (${#packages[@]} packages)..."
-    log_info "pacstrap output will show package progress; this may take several minutes..."
 
-    if ! pacstrap -K "$MOUNT_ROOT" $packages_str 2>&1 | tee -a "$LOG_FILE"; then
+    if ! execute_cmd_retry "pacstrap -K $MOUNT_ROOT $packages_str" \
+        "Installing base system packages" 2; then
         log_error "Pacstrap installation failed"
         return 1
     fi
