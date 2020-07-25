@@ -1277,17 +1277,21 @@ phase_4_luks_encryption() {
     log_info "  Single passphrase: ✓"
 
     # ═══════════════════════════════════════════════════════════
-    # LUKS PASSPHRASE SELF-TEST (INTERACTIVE)
-    # Verify that the passphrase you will use at boot actually
-    # unlocks the root LUKS header. This prevents completing an
-    # installation with an unusable passphrase.
+    # LUKS PASSPHRASE SELF-TEST (NON-INTERACTIVE)
+    # Verify that the passphrase captured in luks_passphrase
+    # actually unlocks the new LUKS header. This avoids a second
+    # manual re-typing step and removes human input errors from
+    # the verification.
     # ═══════════════════════════════════════════════════════════
 
-    log_info "Running LUKS passphrase self-test for $ROOT_PARTITION..."
-    log_info "Type the SAME passphrase you intend to use at boot."
+    log_info "Running LUKS passphrase self-test for $ROOT_PARTITION (non-interactive)..."
 
-    if ! cryptsetup --verbose open --test-passphrase "$ROOT_PARTITION" 2>&1 | tee -a "$LOG_FILE"; then
-        log_error "LUKS self-test failed: the passphrase you entered does NOT unlock $ROOT_PARTITION."
+    # Use the in-memory luks_passphrase via stdin as a key-file.
+    # If this fails, the header does not match the stored
+    # passphrase and we abort to prevent an unbootable system.
+    if ! printf '%s' "$luks_passphrase" | \
+        cryptsetup luksOpen --test-passphrase --key-file - "$ROOT_PARTITION" 2>&1 | tee -a "$LOG_FILE"; then
+        log_error "LUKS self-test failed: stored passphrase does NOT unlock $ROOT_PARTITION."
         log_error "Installation aborted to prevent an unbootable system. Please rerun and choose/passphrase carefully."
         return 1
     fi
