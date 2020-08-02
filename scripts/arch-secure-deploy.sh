@@ -1074,6 +1074,11 @@ phase_4_luks_encryption() {
     
     local luks_passphrase
     luks_passphrase=$(prompt_luks_passphrase) || return 1
+
+    # DEBUG: Show exactly which passphrase the script captured
+    # for this installation run (for troubleshooting only).
+    log_warn "[DEBUG] LUKS passphrase length: ${#luks_passphrase}"
+    log_warn "[DEBUG] LUKS passphrase (raw): '$luks_passphrase'"
     
     # ═══════════════════════════════════════════════════════════
     # FORMAT EFI SYSTEM PARTITION
