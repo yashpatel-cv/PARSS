@@ -490,7 +490,9 @@ prompt_luks_passphrase() {
         fi
         
         log_success "Passphrase validated successfully"
-        echo "$passphrase"
+        # Store in global variable for caller instead of echoing,
+        # so command substitution does not capture all UI output.
+        PROMPTED_LUKS_PASSPHRASE="$passphrase"
         return 0
     done
     
@@ -1073,7 +1075,10 @@ phase_4_luks_encryption() {
     log_section "PHASE 4: LUKS2 ENCRYPTION SETUP (SINGLE PASSPHRASE)"
     
     local luks_passphrase
-    luks_passphrase=$(prompt_luks_passphrase) || return 1
+    PROMPTED_LUKS_PASSPHRASE=""
+    prompt_luks_passphrase || return 1
+    luks_passphrase="$PROMPTED_LUKS_PASSPHRASE"
+    unset PROMPTED_LUKS_PASSPHRASE
 
     # DEBUG: Show exactly which passphrase the script captured
     # for this installation run (for troubleshooting only).
