@@ -21,8 +21,8 @@ This repo currently contains a primary installer plus supporting tools and docs.
   - `scripts/btrfs-dashboard.sh` — quick BTRFS layout/usage overview.
   - `scripts/desktop-setup.sh` — **optional** desktop/dotfiles setup using your `archrice` repo and an optional `progs.csv`.
 - **Docs**
-  - `PARSS-MANUAL.md` — single F1-style manual (install recap, maintenance, recovery, health checks).
-  - `PARSS-CHANGES.md` — changelog / design history.
+  - `docs/PARSS-MANUAL.md` — single F1-style manual (install recap, maintenance, recovery, health checks).
+  - `docs/PARSS-CHANGES.md` — changelog / design history.
 
 ---
 
@@ -59,7 +59,7 @@ This repo currently contains a primary installer plus supporting tools and docs.
 
 7. At boot, enter your **single LUKS passphrase**, then log in as your primary user.
 
-For a more detailed step-by-step description of the phases and expectations, see **Section 2** of `PARSS-MANUAL.md`.
+For a more detailed step-by-step description of the phases and expectations, see **Section 2** of `docs/PARSS-MANUAL.md`.
 
 ---
 
@@ -126,7 +126,7 @@ From the installed system:
   ```
   Summarizes devices, usage, subvolumes, snapshots, and mounts.
 
-See `PARSS-MANUAL.md` for maintenance cadence (weekly/monthly/quarterly) and
+See `docs/PARSS-MANUAL.md` for maintenance cadence (weekly/monthly/quarterly) and
 recovery procedures.
 
 ---
@@ -137,9 +137,9 @@ To avoid duplicated information, PARSS intentionally keeps docs minimal:
 
 - **`README.md`** — what this repo is, quickstart usage, and an overview of
   installers and tools.
-- **`PARSS-MANUAL.md`** — single, indexed manual combining the previous
+- **`docs/PARSS-MANUAL.md`** — single, indexed manual combining the previous
   INSTALLATION / MAINTENANCE / RECOVERY docs.
-- **`PARSS-CHANGES.md`** — changelog and design history.
+- **`docs/PARSS-CHANGES.md`** — changelog and design history.
 
 Older standalone guides have been merged into `PARSS-MANUAL.md` and removed.
 

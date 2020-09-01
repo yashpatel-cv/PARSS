@@ -226,14 +226,15 @@ cd ~/PARSS/scripts
 
 ## 6. F1-Style Help Usage (Planned)
 
-Currently, this `PARSS-MANUAL.md` lives in the PARSS repo root. A future step
-will bind the F1 key (or another shortcut) in your window manager to open this
-manual in a pager or terminal editor (e.g. `less`, `nvim`).
+Currently, this `PARSS-MANUAL.md` lives in the `docs/` folder of the PARSS
+repo. A future step will bind the F1 key (or another shortcut) in your window
+manager to open this manual in a pager or terminal editor (e.g. `less`,
+`nvim`).
 
 For now, you can open it manually after login:
 
 ```bash
-cd ~/PARSS
+cd ~/PARSS/docs
 less PARSS-MANUAL.md
 ```
 

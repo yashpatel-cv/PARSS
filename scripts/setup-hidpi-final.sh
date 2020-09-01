@@ -7,7 +7,7 @@
 # Works with: 1080p, 1440p, 1600p, 3840x2400, etc.
 # Automatically detects display and configures all applications
 #
-# Usage: bash ~/setup-hidpi.sh
+# Usage: bash ~/PARSS/scripts/setup-hidpi-final.sh
 # 
 # What it does:
 #   1. Detects display resolution automatically
@@ -42,6 +42,7 @@ TARGET_DPI=96
 SUCKLESS_FONT_SIZE=9
 DWMSTATUS_FONT_SIZE=8
 DISPLAY_RES="unknown"
+SCALE_FACTOR=1
 
 ################################################################################
 # STEP 1: DETECT DISPLAY AND CALCULATE DPI
@@ -69,44 +70,50 @@ detect_display() {
     
     log_info "Display detected: $DISPLAY_RES"
     
-    # Detect display type and set DPI
+    # Detect display type and set DPI / scale factor
     case "$DISPLAY_RES" in
         3840x2400)
             log_info "WQUXGA (3840x2400) detected → 192 DPI (2x scaling)"
             TARGET_DPI=192
             SUCKLESS_FONT_SIZE=12
             DWMSTATUS_FONT_SIZE=11
+            SCALE_FACTOR=2
             ;;
         2560x1600)
-            log_info "QHD+ (2560x1600) detected → 144 DPI (1.5x scaling)"
+            log_info "QHD+ (2560x1600) detected → 144 DPI (2x logical scaling)"
             TARGET_DPI=144
             SUCKLESS_FONT_SIZE=11
             DWMSTATUS_FONT_SIZE=10
+            SCALE_FACTOR=2
             ;;
         2560x1440)
-            log_info "QHD (2560x1440) detected → 120 DPI (1.25x scaling)"
+            log_info "QHD (2560x1440) detected → 120 DPI (2x logical scaling)"
             TARGET_DPI=120
             SUCKLESS_FONT_SIZE=10
             DWMSTATUS_FONT_SIZE=9
+            SCALE_FACTOR=2
             ;;
         1920x1200)
             log_info "WUXGA (1920x1200) detected → 96 DPI (1x scaling)"
             TARGET_DPI=96
             SUCKLESS_FONT_SIZE=9
             DWMSTATUS_FONT_SIZE=8
+            SCALE_FACTOR=1
             ;;
         1920x1080)
             log_info "1080p (1920x1080) detected → 96 DPI (1x scaling)"
             TARGET_DPI=96
             SUCKLESS_FONT_SIZE=8
             DWMSTATUS_FONT_SIZE=8
+            SCALE_FACTOR=1
             ;;
         *)
             log_warn "Unknown resolution: $DISPLAY_RES"
-            log_info "Using standard 96 DPI"
+            log_info "Using standard 96 DPI and 1x scale"
             TARGET_DPI=96
             SUCKLESS_FONT_SIZE=9
             DWMSTATUS_FONT_SIZE=8
+            SCALE_FACTOR=1
             ;;
     esac
 }
@@ -148,7 +155,7 @@ gtk-font-name:              Noto Sans 11
 gtk-monospace-font-name:    Noto Mono 11
 
 ! ============================================================================
-! COLOR SCHEME (LARBS/Voidrice Compatible)
+! COLOR SCHEME (PARSS/archrice Compatible)
 ! ============================================================================
 
 *background:                #1e1e1e
@@ -180,9 +187,13 @@ EOF
     
     log_success "~/.Xresources created"
     
-    # Apply immediately
-    xrdb -merge "$HOME/.Xresources"
-    log_success "Xresources loaded"
+    # Apply immediately (if xrdb is available)
+    if command -v xrdb &> /dev/null; then
+        xrdb -merge "$HOME/.Xresources"
+        log_success "Xresources loaded"
+    else
+        log_warn "xrdb not found. Install xorg-xrdb to apply Xresources automatically."
+    fi
 }
 
 ################################################################################
@@ -192,18 +203,25 @@ EOF
 create_xinitrc() {
     log_info "Creating ~/.xinitrc with HiDPI environment variables..."
     
-    cat > "$HOME/.xinitrc" << 'EOF'
+    local backup=""
+    if [[ -f "$HOME/.xinitrc" ]]; then
+        backup="$HOME/.xinitrc.backup.$(date +%s)"
+        cp "$HOME/.xinitrc" "$backup"
+        log_warn "Existing ~/.xinitrc backed up to $backup"
+    fi
+
+    cat > "$HOME/.xinitrc" << EOF
 #!/bin/bash
 
 # ============================================================================
-# X11 INITIALIZATION - HiDPI ENVIRONMENT VARIABLES
+# X11 INITIALIZATION - HiDPI ENVIRONMENT VARIABLES (auto-generated)
 # ============================================================================
 
-# Export DPI and scaling factors
-export DPI=192
-export GDK_SCALE=2
+# Export DPI and scaling factors based on detected display
+export DPI=$TARGET_DPI
+export GDK_SCALE=$SCALE_FACTOR
 export GDK_DPI_SCALE=1
-export QT_SCALE_FACTOR=2
+export QT_SCALE_FACTOR=$SCALE_FACTOR
 export XCURSOR_SIZE=48
 export _JAVA_OPTIONS="-Dsun.java2d.dpiaware=true"
 
