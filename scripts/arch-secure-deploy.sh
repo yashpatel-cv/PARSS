@@ -126,9 +126,6 @@ declare AVAILABLE_SPACE_GB=0
 # === INTERACTIVE CONFIGURATION VARIABLES ===
 declare HOSTNAME_SYS="devta"
 declare PRIMARY_USER="patel"
-declare BTRFS_ROOT_VOL="root"
-declare BTRFS_HOME_VOL="home"
-declare BTRFS_SNAP_VOL="snapshots"
 declare LUKS_ROOT_NAME="mahadev"
 declare ADD_LOG_SUBVOLUME="true"
 declare ENABLE_NVIDIA_GPU="true"
@@ -640,33 +637,10 @@ phase_1b_interactive_configuration() {
     log_info "SECTION 2: Storage & BTRFS Configuration"
     echo ""
     
-    log_info "BTRFS root logical volume name"
-    echo "This labels your encrypted root volume"
-    read -p "BTRFS root volume [root]: " input_root_vol
-    BTRFS_ROOT_VOL="${input_root_vol:-root}"
-    
-    if ! validate_volume_name "$BTRFS_ROOT_VOL"; then
-        log_error "Invalid BTRFS root volume name"
-        return 1
-    fi
-    
-    log_success "BTRFS root volume: $BTRFS_ROOT_VOL"
-    
-    # BTRFS_HOME_VOL is kept for @home subvolume label but not as separate partition
-    BTRFS_HOME_VOL="home"
-    log_success "BTRFS home subvolume: @home"
-    
-    log_info "BTRFS snapshots volume name"
-    echo "This stores BTRFS snapshots for recovery"
-    read -p "BTRFS snapshots volume [snapshots]: " input_snap_vol
-    BTRFS_SNAP_VOL="${input_snap_vol:-snapshots}"
-    
-    if ! validate_volume_name "$BTRFS_SNAP_VOL"; then
-        log_error "Invalid BTRFS snapshots volume name"
-        return 1
-    fi
-    
-    log_success "BTRFS snapshots volume: $BTRFS_SNAP_VOL"
+    # BTRFS subvolumes use standard naming convention:
+    # @, @home, @var, @snapshots, @varcache, @log (no customization needed)
+    log_info "BTRFS subvolumes will use standard naming: @, @home, @var, @snapshots, @varcache, @log"
+    log_success "BTRFS layout configured with standard subvolume names"
     
     log_info "Include @log BTRFS subvolume?"
     echo "(Separates systemd journal - improves snapshot efficiency)"
@@ -742,9 +716,6 @@ phase_1b_interactive_configuration() {
     
     save_state "HOSTNAME_SYS" "$HOSTNAME_SYS"
     save_state "PRIMARY_USER" "$PRIMARY_USER"
-    save_state "BTRFS_ROOT_VOL" "$BTRFS_ROOT_VOL"
-    save_state "BTRFS_HOME_VOL" "$BTRFS_HOME_VOL"
-    save_state "BTRFS_SNAP_VOL" "$BTRFS_SNAP_VOL"
     save_state "LUKS_ROOT_NAME" "$LUKS_ROOT_NAME"
     save_state "ADD_LOG_SUBVOLUME" "$ADD_LOG_SUBVOLUME"
     save_state "ENABLE_NVIDIA_GPU" "$ENABLE_NVIDIA_GPU"
