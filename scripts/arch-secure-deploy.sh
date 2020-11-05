@@ -1490,8 +1490,23 @@ phase_8_chroot_configuration() {
         echo 'GRUB_DISABLE_OS_PROBER=false' >> "$grub_default"
     fi
     
+    # Configure GRUB menu timeout and visibility
+    # GRUB_TIMEOUT: seconds to show menu (5 seconds)
+    # GRUB_TIMEOUT_STYLE: 'menu' ensures menu is always visible
+    if grep -q 'GRUB_TIMEOUT=' "$grub_default"; then
+        sed -i 's/^#\?GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' "$grub_default"
+    else
+        echo 'GRUB_TIMEOUT=5' >> "$grub_default"
+    fi
+    
+    if grep -q 'GRUB_TIMEOUT_STYLE=' "$grub_default"; then
+        sed -i 's/^#\?GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' "$grub_default"
+    else
+        echo 'GRUB_TIMEOUT_STYLE=menu' >> "$grub_default"
+    fi
+    
     log_info "Updated GRUB configuration:"
-    grep -E "^(GRUB_CMDLINE_LINUX|GRUB_ENABLE_CRYPTODISK|GRUB_DISTRIBUTOR|GRUB_DISABLE_OS_PROBER)" "$grub_default" | tee -a "$LOG_FILE"
+    grep -E "^(GRUB_CMDLINE_LINUX|GRUB_ENABLE_CRYPTODISK|GRUB_DISTRIBUTOR|GRUB_DISABLE_OS_PROBER|GRUB_TIMEOUT)" "$grub_default" | tee -a "$LOG_FILE"
     
     # ═══════════════════════════════════════════════════════════
     # GENERATE GRUB CONFIGURATION
@@ -1788,17 +1803,36 @@ phase_14_optional_desktop_setup() {
     log_info "Starting desktop environment installation..."
     save_state "DESKTOP_SETUP_STARTED" "true"
     
-    # Check if desktop-setup.sh exists in current directory
-    local desktop_script="$(dirname "$0")/desktop-setup.sh"
-    if [[ ! -f "$desktop_script" ]]; then
-        log_warn "desktop-setup.sh not found at: $desktop_script"
-        log_warn "Searching in parent directory..."
-        desktop_script="$(dirname "$(dirname "$0")")/scripts/desktop-setup.sh"
-        if [[ ! -f "$desktop_script" ]]; then
-            log_error "Cannot find desktop-setup.sh"
-            log_error "Please run it manually after reboot"
-            return 0
+    # Get absolute path of this script to find desktop-setup.sh
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    # Try multiple locations for desktop-setup.sh
+    local desktop_script=""
+    local search_paths=(
+        "$script_dir/desktop-setup.sh"                    # Same directory as installer
+        "$script_dir/../scripts/desktop-setup.sh"         # If run from parent dir
+        "$(pwd)/desktop-setup.sh"                         # Current working directory
+        "$(pwd)/scripts/desktop-setup.sh"                 # scripts/ in current dir
+    )
+    
+    log_debug "Searching for desktop-setup.sh in multiple locations..."
+    for path in "${search_paths[@]}"; do
+        log_debug "  Checking: $path"
+        if [[ -f "$path" ]]; then
+            desktop_script="$path"
+            log_info "Found desktop-setup.sh at: $desktop_script"
+            break
         fi
+    done
+    
+    if [[ -z "$desktop_script" ]]; then
+        log_error "Cannot find desktop-setup.sh in any expected location:"
+        log_error "  - $script_dir/desktop-setup.sh"
+        log_error "  - $(pwd)/scripts/desktop-setup.sh"
+        log_error "Please ensure desktop-setup.sh is in the same directory as arch-secure-deploy.sh"
+        log_error "You can run it manually after reboot."
+        return 0
     fi
     
     # Copy desktop-setup.sh to the installed system
