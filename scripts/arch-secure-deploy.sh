@@ -1505,6 +1505,14 @@ phase_8_chroot_configuration() {
         echo 'GRUB_TIMEOUT_STYLE=menu' >> "$grub_default"
     fi
     
+    # Enable detection of ALL bootable devices (USB, CD, HDD, SSD, etc.)
+    # GRUB_DISABLE_SUBMENU: Show all entries in main menu instead of submenus
+    if grep -q 'GRUB_DISABLE_SUBMENU=' "$grub_default"; then
+        sed -i 's/^#\?GRUB_DISABLE_SUBMENU=.*/GRUB_DISABLE_SUBMENU=y/' "$grub_default"
+    else
+        echo 'GRUB_DISABLE_SUBMENU=y' >> "$grub_default"
+    fi
+    
     log_info "Updated GRUB configuration:"
     grep -E "^(GRUB_CMDLINE_LINUX|GRUB_ENABLE_CRYPTODISK|GRUB_DISTRIBUTOR|GRUB_DISABLE_OS_PROBER|GRUB_TIMEOUT)" "$grub_default" | tee -a "$LOG_FILE"
     
@@ -1850,8 +1858,10 @@ phase_14_optional_desktop_setup() {
     
     # Execute desktop-setup.sh as the primary user
     # Use sudo -u to run as primary user (AUR requires non-root)
+    # Set PARSS_CHROOT_INSTALL to bypass root check in desktop-setup.sh
     arch-chroot "$MOUNT_ROOT" /bin/bash -c "
         export HOME=/home/$PRIMARY_USER
+        export PARSS_CHROOT_INSTALL=1
         cd /home/$PRIMARY_USER
         sudo -u $PRIMARY_USER /tmp/desktop-setup.sh
     " 2>&1 | tee -a "$LOG_FILE"

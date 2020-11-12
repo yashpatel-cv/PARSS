@@ -14,6 +14,11 @@ warn()  { printf '\033[1;33m[WARN]\033[0m %s\n' "$*"; }
 error() { printf '\033[0;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
 
 require_not_root() {
+    # Skip this check if running in chroot (arch-chroot sets this)
+    if [[ -n "${PARSS_CHROOT_INSTALL:-}" ]]; then
+        return 0
+    fi
+    
     if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
         error "Run this script as your regular user (with sudo), not as root."
     fi
