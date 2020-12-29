@@ -1879,22 +1879,33 @@ phase_14_optional_desktop_setup() {
     fi
     
     # Copy desktop-setup.sh to the installed system
+    # Use /root instead of /tmp (tmpfs might not persist in chroot)
     log_info "Copying desktop-setup.sh to installed system..."
-    cp "$desktop_script" "$MOUNT_ROOT/tmp/desktop-setup.sh" || {
+    mkdir -p "$MOUNT_ROOT/root"
+    cp "$desktop_script" "$MOUNT_ROOT/root/desktop-setup.sh" || {
         log_error "Failed to copy desktop-setup.sh"
         return 0
     }
-    chmod +x "$MOUNT_ROOT/tmp/desktop-setup.sh"
+    chmod +x "$MOUNT_ROOT/root/desktop-setup.sh"
     
     # Verify the file was copied and is readable
-    if [[ ! -f "$MOUNT_ROOT/tmp/desktop-setup.sh" ]]; then
-        log_error "desktop-setup.sh not found after copy at $MOUNT_ROOT/tmp/desktop-setup.sh"
+    if [[ ! -f "$MOUNT_ROOT/root/desktop-setup.sh" ]]; then
+        log_error "desktop-setup.sh not found after copy at $MOUNT_ROOT/root/desktop-setup.sh"
         return 0
     fi
     
     log_debug "Verifying desktop-setup.sh in chroot..."
-    log_debug "File size: $(stat -c%s "$MOUNT_ROOT/tmp/desktop-setup.sh" 2>/dev/null || echo 'unknown') bytes"
-    log_debug "File permissions: $(stat -c%a "$MOUNT_ROOT/tmp/desktop-setup.sh" 2>/dev/null || echo 'unknown')"
+    log_debug "File size: $(stat -c%s "$MOUNT_ROOT/root/desktop-setup.sh" 2>/dev/null || echo 'unknown') bytes"
+    log_debug "File permissions: $(stat -c%a "$MOUNT_ROOT/root/desktop-setup.sh" 2>/dev/null || echo 'unknown')"
+    
+    # Verify file is accessible from within chroot
+    log_debug "Verifying file exists inside chroot..."
+    if ! arch-chroot "$MOUNT_ROOT" test -f /root/desktop-setup.sh; then
+        log_error "desktop-setup.sh not accessible inside chroot at /root/desktop-setup.sh"
+        log_error "Mount point may not be properly set up"
+        return 0
+    fi
+    log_debug "File verified inside chroot"
     
     # Test if sudo works in chroot before running desktop setup
     log_debug "Testing sudo and user environment in chroot..."
@@ -1918,7 +1929,7 @@ phase_14_optional_desktop_setup() {
         export HOME=/home/$PRIMARY_USER
         export PARSS_CHROOT_INSTALL=1
         cd /home/$PRIMARY_USER
-        sudo -u $PRIMARY_USER /bin/bash /tmp/desktop-setup.sh
+        sudo -u $PRIMARY_USER /bin/bash /root/desktop-setup.sh
     " 2>&1 | tee -a "$LOG_FILE"
     
     local exit_code=${PIPESTATUS[0]}
@@ -1936,7 +1947,7 @@ phase_14_optional_desktop_setup() {
     fi
     
     # Cleanup
-    rm -f "$MOUNT_ROOT/tmp/desktop-setup.sh"
+    rm -f "$MOUNT_ROOT/root/desktop-setup.sh"
     
     log_success "Phase 14 completed"
 }
