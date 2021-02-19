@@ -1904,7 +1904,34 @@ else
     }
 fi
 
-# 2. Install packages from progs.csv
+# 2. Install AUR helper (yay) - LARBS method
+info "Installing AUR helper (yay)..."
+if ! command -v yay >/dev/null 2>&1; then
+    # Install yay from AUR (same method as LARBS)
+    repodir="/home/$PRIMARY_USER/.local/src"
+    sudo -u $PRIMARY_USER mkdir -p "\$repodir/yay"
+    
+    sudo -u $PRIMARY_USER git -C "\$repodir" clone --depth 1 --single-branch \
+        --no-tags -q "https://aur.archlinux.org/yay.git" "\$repodir/yay" || {
+        cd "\$repodir/yay" || exit 1
+        sudo -u $PRIMARY_USER git pull --force origin master
+    }
+    
+    cd "\$repodir/yay" || exit 1
+    sudo -u $PRIMARY_USER makepkg --noconfirm -si >/dev/null 2>&1 || {
+        warn "Failed to install yay"
+        exit 1
+    }
+    
+    # Configure yay for auto-updates of *-git packages (LARBS does this)
+    sudo -u $PRIMARY_USER yay -Y --save --devel >/dev/null 2>&1
+    
+    info "✓ yay installed"
+else
+    info "✓ yay already installed"
+fi
+
+# 3. Install packages from progs.csv
 info "Looking for progs.csv at: $PROGS_FILE"
 if [[ ! -f "$PROGS_FILE" ]]; then
     warn "No progs.csv found at $PROGS_FILE"
@@ -1958,7 +1985,7 @@ else
     done < "$PROGS_FILE"
 fi
 
-# 3. Deploy dotfiles
+# 4. Deploy dotfiles
 info "Deploying dotfiles to /home/$PRIMARY_USER..."
 if command -v rsync >/dev/null 2>&1; then
     sudo -u $PRIMARY_USER rsync -a --delete --exclude='.git' "$DOTFILES_DIR"/ "/home/$PRIMARY_USER"/
@@ -1967,7 +1994,7 @@ else
     sudo -u $PRIMARY_USER cp -rf "$DOTFILES_DIR"/. "/home/$PRIMARY_USER"/
 fi
 
-# 4. OLED/HiDPI Configuration
+# 5. OLED/HiDPI Configuration
 info "Configuring OLED theme and HiDPI support..."
 
 # Make all scripts executable
