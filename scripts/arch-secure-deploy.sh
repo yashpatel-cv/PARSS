@@ -1998,20 +1998,26 @@ if [[ ! -f "$PROGS_FILE" ]]; then
     info "Contents of $DOTFILES_DIR:"
     ls -la "$DOTFILES_DIR" || warn "Directory doesn't exist"
 else
-    info "Installing packages from progs.csv..."
+    info "Counting packages..."
+    total=\$(grep -c "^[^#]" "$PROGS_FILE" || echo 0)
+    n=0
+    info "Installing \$total packages from progs.csv..."
+    info ""
     
     while IFS=, read -r tag prog comment; do
         # Skip comments and blank lines
         [[ -z "\${tag}\${prog}" ]] && continue
         [[ "\$tag" =~ ^# ]] && continue
         
+        n=\$((n + 1))
+        
         case "\$tag" in
             "" )
-                info "[pacman] \$prog"
+                info "[\$n/\$total] [pacman] \$prog"
                 pacman --noconfirm --needed -S "\$prog" >/dev/null 2>&1 || warn "Failed: \$prog"
                 ;;
             "G" )
-                info "[git/make] \$prog"
+                info "[\$n/\$total] [git/make] \$prog"
                 repodir="/home/$PRIMARY_USER/.local/src"
                 sudo -u $PRIMARY_USER mkdir -p "\$repodir"
                 name="\${prog##*/}"
@@ -2032,8 +2038,16 @@ else
             "A" )
                 # AUR packages - requires AUR helper (yay)
                 if command -v yay >/dev/null 2>&1; then
-                    info "[AUR] \$prog"
-                    sudo -u $PRIMARY_USER yay --noconfirm --needed -S "\$prog" >/dev/null 2>&1 || warn "Failed: \$prog"
+                    info "[\$n/\$total] [AUR] \$prog (building from source, may take a few minutes...)"
+                    # Show some output for AUR packages so user knows it's working
+                    sudo -u $PRIMARY_USER yay --noconfirm --needed -S "\$prog" 2>&1 | grep -E '(Cloning|Building|Installing|Installed|->)' || true
+                    
+                    # Check if package was installed
+                    if pacman -Q "\$prog" >/dev/null 2>&1; then
+                        info "✓ \$prog installed"
+                    else
+                        warn "Failed: \$prog"
+                    fi
                 else
                     warn "No AUR helper (yay) found, skipping: \$prog"
                 fi
@@ -2043,6 +2057,9 @@ else
                 ;;
         esac
     done < "$PROGS_FILE"
+    
+    info ""
+    info "✓ Package installation complete (\$n packages processed)"
 fi
 
 # 4. Deploy dotfiles
