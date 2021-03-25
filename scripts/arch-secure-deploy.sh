@@ -141,6 +141,127 @@ readonly MAX_RETRIES=3
 readonly RETRY_DELAY=5
 
 ################################################################################
+# TUI (TEXT USER INTERFACE) FUNCTIONS
+################################################################################
+
+# Global TUI availability flag
+TUI_AVAILABLE=false
+
+# Initialize TUI (whiptail/dialog)
+init_tui() {
+    # Try to install whiptail if not present
+    if ! command -v whiptail >/dev/null 2>&1; then
+        log_info "Installing whiptail for enhanced UI..."
+        if pacman -Sy --noconfirm libnewt >/dev/null 2>&1; then
+            TUI_AVAILABLE=true
+            log_success "TUI enabled (whiptail)"
+        else
+            log_warn "Could not install whiptail, using text-only mode"
+            TUI_AVAILABLE=false
+        fi
+    else
+        TUI_AVAILABLE=true
+    fi
+}
+
+# Show info box (non-blocking status message)
+tui_info() {
+    local title="$1"
+    local message="$2"
+    
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        whiptail --title "$title" --infobox "$message" 8 70
+    fi
+    # Always log to console too
+    log_info "$message"
+}
+
+# Show progress gauge (percentage-based)
+tui_gauge() {
+    local title="$1"
+    local message="$2"
+    local percent="$3"
+    
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        echo "$percent" | whiptail --title "$title" --gauge "$message" 8 70 0
+    else
+        log_info "[$percent%] $message"
+    fi
+}
+
+# Show message box (requires user acknowledgment)
+tui_msgbox() {
+    local title="$1"
+    local message="$2"
+    local height="${3:-10}"
+    local width="${4:-70}"
+    
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        whiptail --title "$title" --msgbox "$message" $height $width
+    else
+        echo ""
+        echo "═══════════════════════════════════════════════════════════"
+        echo "$title"
+        echo "═══════════════════════════════════════════════════════════"
+        echo "$message"
+        echo "═══════════════════════════════════════════════════════════"
+        read -p "Press Enter to continue..."
+    fi
+}
+
+# Show yes/no dialog
+tui_yesno() {
+    local title="$1"
+    local question="$2"
+    local height="${3:-10}"
+    local width="${4:-70}"
+    
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        if whiptail --title "$title" --yesno "$question" $height $width; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        echo ""
+        echo "═══════════════════════════════════════════════════════════"
+        echo "$title"
+        echo "═══════════════════════════════════════════════════════════"
+        echo "$question"
+        echo "═══════════════════════════════════════════════════════════"
+        read -p "Continue? (y/N): " response
+        [[ "$response" =~ ^[yY]$ ]] && return 0 || return 1
+    fi
+}
+
+# Progress tracker for package installation
+tui_package_progress() {
+    local current="$1"
+    local total="$2"
+    local package_name="$3"
+    local operation="$4"  # "installing", "building", etc.
+    
+    local percent=$((current * 100 / total))
+    local title="PARSS Installation Progress"
+    local message="Package $current of $total: $package_name\n\n$operation..."
+    
+    tui_info "$title" "$message"
+}
+
+# Show installation phase progress
+tui_phase_start() {
+    local phase_num="$1"
+    local phase_name="$2"
+    local description="$3"
+    
+    local title="PARSS - Phase $phase_num"
+    local message="Starting: $phase_name\n\n$description"
+    
+    tui_info "$title" "$message"
+    sleep 1  # Brief pause so user can see
+}
+
+################################################################################
 # UTILITY FUNCTIONS
 ################################################################################
 
@@ -545,7 +666,7 @@ check_disk_space() {
 }
 
 ################################################################################
-# PHASE 1: PRE-FLIGHT VALIDATION
+# PHASE 1: PRE-FLIGHT CHECKS
 ################################################################################
 
 phase_1_preflight_checks() {
@@ -751,7 +872,7 @@ phase_1b_interactive_configuration() {
 }
 
 ################################################################################
-# PHASE 2: DEVICE & PARTITION CONFIGURATION (MENU-BASED SELECTION)
+# PHASE 2: DEVICE CONFIGURATION
 ################################################################################
 
 phase_2_device_configuration() {
@@ -828,7 +949,7 @@ phase_2_device_configuration() {
     
     confirm_destructive_operation "$TARGET_DEVICE"
     
-    # CRITICAL FIX: Set partition names BEFORE Phase 3
+    # Set partition names based on device type
     if [[ "$TARGET_DEVICE" == *"nvme"* ]] || [[ "$TARGET_DEVICE" == *"mmcblk"* ]]; then
         BOOT_PARTITION="${TARGET_DEVICE}p1"
         ROOT_PARTITION="${TARGET_DEVICE}p2"
@@ -848,7 +969,7 @@ phase_2_device_configuration() {
 }
 
 ################################################################################
-# PRE-FLIGHT UNMOUNT ALL (CLEANUP BEFORE PHASE 3)
+# PRE-FLIGHT: CLEANUP & UNMOUNT
 ################################################################################
 
 pre_flight_unmount_all() {
@@ -893,11 +1014,11 @@ pre_flight_unmount_all() {
 }
 
 ################################################################################
-# PHASE 3: DISK WIPING & PARTITIONING (CRITICAL FIXES)
+# PHASE 3: DISK PREPARATION
 ################################################################################
 
 phase_3_disk_preparation() {
-    log_section "PHASE 3: DISK WIPING & PARTITIONING (FIXED)"
+    log_section "PHASE 3: DISK PREPARATION"
     
     pre_flight_unmount_all
     
@@ -963,7 +1084,7 @@ phase_3_disk_preparation() {
     log_success "All partitions verified successfully"
     
     log_info "Setting partition type (LUKS)..."
-    parted -s "$TARGET_DEVICE" set 2 type 8309 2>/dev/null || log_warn "Could not set root partition type (non-critical)"
+    parted -s "$TARGET_DEVICE" set 2 type 8309 2>/dev/null || log_warn "Could not set root partition type"
     
     log_info "Final partition table:"
     parted -s "$TARGET_DEVICE" print | tee -a "$LOG_FILE"
@@ -973,11 +1094,11 @@ phase_3_disk_preparation() {
 }
 
 ################################################################################
-# PHASE 4: LUKS ENCRYPTION SETUP (SINGLE PASSPHRASE)
+# PHASE 4: LUKS ENCRYPTION
 ################################################################################
 
 phase_4_luks_encryption() {
-    log_section "PHASE 4: LUKS2 ENCRYPTION SETUP (SINGLE PASSPHRASE)"
+    log_section "PHASE 4: LUKS ENCRYPTION"
     
     local luks_passphrase
     PROMPTED_LUKS_PASSPHRASE=""
@@ -1031,7 +1152,7 @@ phase_4_luks_encryption() {
     
     log_info "Encrypting root partition with LUKS2 (Argon2id KDF)..."
     
-    # CRITICAL FIX: Use temporary keyfile instead of pipe
+    # Use temporary keyfile for LUKS setup
     local temp_keyfile_root="/tmp/luks-root-key-$$"
     echo -n "$luks_passphrase" > "$temp_keyfile_root"
     chmod 600 "$temp_keyfile_root"
@@ -1139,8 +1260,7 @@ phase_4_luks_encryption() {
 }
 
 ################################################################################
-# REST OF PHASES (5-13) - REMAIN UNCHANGED
-# (These are identical to previous version, just continuing from Phase 5)
+# PHASE 5: BTRFS FILESYSTEM
 ################################################################################
 
 phase_5_btrfs_filesystem() {
@@ -1379,7 +1499,10 @@ EOF
     log_success "Phase 7 completed successfully"
 }
 
-# CRITICAL FIX: Phase 8 - Corrected mkinitcpio HOOKS and GRUB configuration
+################################################################################
+# PHASE 8: BOOTLOADER CONFIGURATION
+################################################################################
+
 phase_8_chroot_configuration() {
     log_section "PHASE 8: CHROOT ENVIRONMENT & BOOTLOADER"
     
@@ -1861,65 +1984,71 @@ TIMER
 }
 
 phase_14_optional_desktop_setup() {
-    echo ""
-    echo ""
-    echo "╔═══════════════════════════════════════════════════════════════════════════════╗"
-    echo "║                                                                               ║"
-    echo "║                    🎨  DESKTOP ENVIRONMENT INSTALLATION  🎨                   ║"
-    echo "║                                                                               ║"
-    echo "║                              ⚡ PHASE 14 ⚡                                    ║"
-    echo "║                                                                               ║"
-    echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
-    echo ""
-    echo "  🎉 Congratulations! Your secure base system is ready!"
-    echo ""
-    echo "  ┌─────────────────────────────────────────────────────────────────────────┐"
-    echo "  │  The next step is optional but HIGHLY RECOMMENDED:                     │"
-    echo "  │                                                                         │"
-    echo "  │  Install your complete desktop environment (DWM + Dotfiles)             │"
-    echo "  └─────────────────────────────────────────────────────────────────────────┘"
-    echo ""
-    echo "  📦 WHAT WILL BE INSTALLED:"
-    echo "  ────────────────────────────────────────────────────────────────────────────"
-    echo "    • Your archrice dotfiles (personal configs)"
-    echo "    • yay AUR helper (for AUR packages)"
-    echo "    • DWM window manager (lightweight, keyboard-driven)"
-    echo "    • ST terminal (simple, fast terminal emulator)"
-    echo "    • dmenu (application launcher)"
-    echo "    • dwmblocks (status bar)"
-    echo "    • Moonfly OLED theme (optimized for OLED displays)"
-    echo "    • All packages from progs.csv (~60 packages)"
-    echo "    • Librewolf browser + extensions"
-    echo "    • Development tools (neovim, git, etc.)"
-    echo ""
-    echo "  ⚡ ADVANTAGES OF INSTALLING NOW:"
-    echo "  ────────────────────────────────────────────────────────────────────────────"
-    echo "    ✓ No reboot needed - continue immediately"
-    echo "    ✓ Network already configured and working"
-    echo "    ✓ Faster testing and iteration workflow"
-    echo "    ✓ Complete system ready in one session"
-    echo ""
-    echo "  ⏱️  ESTIMATED TIME: 10-30 minutes (depending on network speed)"
-    echo ""
-    echo "  💡 TIP: You can always install this later by running:"
-    echo "     sudo bash arch-secure-deploy.sh --phase 14"
-    echo ""
-    echo "╔═══════════════════════════════════════════════════════════════════════════════╗"
-    echo "║                                                                               ║"
-    echo "║                     INSTALL DESKTOP ENVIRONMENT NOW?                          ║"
-    echo "║                                                                               ║"
-    echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
-    echo ""
-    
-    # Prompt user
-    local response
-    read -p "  👉 Your choice (y/N): " response
-    
-    if [[ ! "$response" =~ ^[yY]$ ]]; then
-        log_info "Skipping desktop environment setup."
-        save_state "DESKTOP_SETUP_SKIPPED" "true"
-        log_success "Phase 14 skipped by user"
-        return 0
+    # Show TUI or text-based prompt
+    local prompt_message="🎉 Congratulations! Your secure base system is ready!
+
+The next step is OPTIONAL but RECOMMENDED:
+Install complete desktop environment (DWM + Dotfiles)
+
+📦 WHAT WILL BE INSTALLED:
+  • archrice dotfiles (personal configs)
+  • yay AUR helper (for AUR packages)
+  • DWM window manager (lightweight, keyboard-driven)
+  • ST terminal, dmenu, dwmblocks
+  • Moonfly OLED theme (optimized for OLED displays)
+  • ~60 packages from progs.csv
+  • Librewolf browser + extensions
+  • Development tools (neovim, git, etc.)
+
+⚡ ADVANTAGES:
+  ✓ No reboot needed - continue immediately
+  ✓ Network already configured
+  ✓ Faster testing workflow
+  ✓ Complete system ready in one session
+
+⏱️  TIME: 10-30 minutes (network dependent)
+
+💡 TIP: Can install later with:
+   sudo bash arch-secure-deploy.sh --phase 14"
+
+    # Use TUI if available, otherwise text prompt
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        if ! tui_yesno "PHASE 14: Desktop Environment" "$prompt_message" 25 78; then
+            log_info "Desktop environment installation skipped by user"
+            save_state "DESKTOP_SETUP_SKIPPED" "true"
+            log_success "Phase 14 skipped"
+            return 0
+        fi
+    else
+        # Fallback to text-based prompt
+        echo ""
+        echo ""
+        echo "╔═══════════════════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                               ║"
+        echo "║                    🎨  DESKTOP ENVIRONMENT INSTALLATION  🎨                   ║"
+        echo "║                                                                               ║"
+        echo "║                              ⚡ PHASE 14 ⚡                                    ║"
+        echo "║                                                                               ║"
+        echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "$prompt_message"
+        echo ""
+        echo "╔═══════════════════════════════════════════════════════════════════════════════╗"
+        echo "║                                                                               ║"
+        echo "║                     INSTALL DESKTOP ENVIRONMENT NOW?                          ║"
+        echo "║                                                                               ║"
+        echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        
+        local response
+        read -p "  👉 Your choice (y/N): " response
+        
+        if [[ ! "$response" =~ ^[yY]$ ]]; then
+            log_info "Skipping desktop environment setup."
+            save_state "DESKTOP_SETUP_SKIPPED" "true"
+            log_success "Phase 14 skipped by user"
+            return 0
+        fi
     fi
     
     log_info "Starting desktop environment installation..."
@@ -1998,11 +2127,10 @@ if [[ ! -f "$PROGS_FILE" ]]; then
     info "Contents of $DOTFILES_DIR:"
     ls -la "$DOTFILES_DIR" || warn "Directory doesn't exist"
 else
-    info "Counting packages..."
-    total=\$(grep -c "^[^#]" "$PROGS_FILE" || echo 0)
+    # Count total packages for progress tracking
+    total=\$(grep -c "^[^#]" "$PROGS_FILE" 2>/dev/null || echo 0)
     n=0
     info "Installing \$total packages from progs.csv..."
-    info ""
     
     while IFS=, read -r tag prog comment; do
         # Skip comments and blank lines
@@ -2013,10 +2141,19 @@ else
         
         case "\$tag" in
             "" )
+                # Show progress in TUI or console
+                if [[ "$TUI_AVAILABLE" == "true" ]]; then
+                    percent=\$((n * 100 / total))
+                    echo \$percent | whiptail --title "PARSS Desktop Setup" --gauge "[\$n/\$total] Installing: \$prog" 8 70 0 &
+                fi
                 info "[\$n/\$total] [pacman] \$prog"
                 pacman --noconfirm --needed -S "\$prog" >/dev/null 2>&1 || warn "Failed: \$prog"
                 ;;
             "G" )
+                if [[ "$TUI_AVAILABLE" == "true" ]]; then
+                    percent=\$((n * 100 / total))
+                    echo \$percent | whiptail --title "PARSS Desktop Setup" --gauge "[\$n/\$total] Building: \$prog" 8 70 0 &
+                fi
                 info "[\$n/\$total] [git/make] \$prog"
                 repodir="/home/$PRIMARY_USER/.local/src"
                 sudo -u $PRIMARY_USER mkdir -p "\$repodir"
@@ -2038,16 +2175,12 @@ else
             "A" )
                 # AUR packages - requires AUR helper (yay)
                 if command -v yay >/dev/null 2>&1; then
-                    info "[\$n/\$total] [AUR] \$prog (building from source, may take a few minutes...)"
-                    # Show some output for AUR packages so user knows it's working
-                    sudo -u $PRIMARY_USER yay --noconfirm --needed -S "\$prog" 2>&1 | grep -E '(Cloning|Building|Installing|Installed|->)' || true
-                    
-                    # Check if package was installed
-                    if pacman -Q "\$prog" >/dev/null 2>&1; then
-                        info "✓ \$prog installed"
-                    else
-                        warn "Failed: \$prog"
+                    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+                        percent=\$((n * 100 / total))
+                        echo \$percent | whiptail --title "PARSS Desktop Setup" --gauge "[\$n/\$total] Building from AUR: \$prog\n\nThis may take several minutes..." 9 70 0 &
                     fi
+                    info "[\$n/\$total] [AUR] \$prog (building from source...)"
+                    sudo -u $PRIMARY_USER yay --noconfirm --needed -S "\$prog" >/dev/null 2>&1 || warn "Failed: \$prog"
                 else
                     warn "No AUR helper (yay) found, skipping: \$prog"
                 fi
@@ -2240,6 +2373,9 @@ EOF
 }
 
 main() {
+    # Initialize TUI if possible
+    init_tui
+    
     # Parse command-line arguments
     local START_FROM_PHASE=1
     local RUN_ONLY_PHASE=""
