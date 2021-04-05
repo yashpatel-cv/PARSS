@@ -162,6 +162,29 @@ init_tui() {
     else
         TUI_AVAILABLE=true
     fi
+    
+    # Configure whiptail colors: black background with colored text
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        export NEWT_COLORS="
+root=white,black
+window=white,black
+border=brightcyan,black
+title=brightwhite,black
+textbox=white,black
+button=black,cyan
+compactbutton=white,black
+actbutton=white,cyan
+checkbox=white,black
+actcheckbox=brightwhite,cyan
+entry=white,black
+disentry=gray,black
+label=white,black
+listbox=white,black
+actlistbox=white,cyan
+sellistbox=black,cyan
+actsellistbox=black,cyan
+"
+    fi
 }
 
 # Show info box (non-blocking status message)
@@ -259,6 +282,24 @@ tui_phase_start() {
     
     tui_info "$title" "$message"
     sleep 1  # Brief pause so user can see
+}
+
+# Show long-running operation with simulated progress
+tui_long_operation() {
+    local title="$1"
+    local message="$2"
+    local duration="${3:-10}"  # Default 10 seconds
+    
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        (
+            for i in $(seq 0 5 100); do
+                echo $i
+                sleep $((duration / 20))
+            done
+        ) | whiptail --title "$title" --gauge "$message" 8 70 0
+    else
+        log_info "$message"
+    fi
 }
 
 ################################################################################
@@ -670,6 +711,7 @@ check_disk_space() {
 ################################################################################
 
 phase_1_preflight_checks() {
+    tui_phase_start "1" "Pre-flight Checks" "Validating system requirements and environment"
     log_section "PHASE 1: PRE-FLIGHT VALIDATION"
     
     log_info "Checking system resources..."
@@ -714,6 +756,7 @@ phase_1_preflight_checks() {
 ################################################################################
 
 phase_1b_interactive_configuration() {
+    tui_phase_start "1B" "System Configuration" "Collecting installation parameters"
     log_section "PHASE 1B: INTERACTIVE SYSTEM CONFIGURATION"
     
     echo ""
@@ -876,6 +919,7 @@ phase_1b_interactive_configuration() {
 ################################################################################
 
 phase_2_device_configuration() {
+    tui_phase_start "2" "Device Selection" "Selecting target device and partition layout"
     log_section "PHASE 2: DEVICE & PARTITION CONFIGURATION"
     
     log_info "Available block devices:"
@@ -1018,6 +1062,7 @@ pre_flight_unmount_all() {
 ################################################################################
 
 phase_3_disk_preparation() {
+    tui_phase_start "3" "Disk Preparation" "Wiping and partitioning target device"
     log_section "PHASE 3: DISK PREPARATION"
     
     pre_flight_unmount_all
@@ -1026,10 +1071,13 @@ phase_3_disk_preparation() {
     cryptsetup close "${LUKS_ROOT_NAME}" 2>/dev/null || true
     
     log_info "Wiping existing filesystem signatures from $TARGET_DEVICE..."
-    execute_cmd "wipefs -af $TARGET_DEVICE" "Wiping all filesystem signatures" true
-    
-    log_info "Zeroing out first 10MB of disk..."
-    dd if=/dev/zero of="$TARGET_DEVICE" bs=1M count=10 conv=fsync 2>/dev/null || true
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        (wipefs -af $TARGET_DEVICE 2>&1 && echo 50 && dd if=/dev/zero of="$TARGET_DEVICE" bs=1M count=10 status=none 2>&1 && echo 100) | whiptail --title "PARSS - Disk Preparation" --gauge "Wiping disk signatures and zeroing..." 8 70 0
+    else
+        execute_cmd "wipefs -af $TARGET_DEVICE" "Wiping all filesystem signatures" true
+        log_info "Zeroing out first 10MB of disk..."
+        dd if=/dev/zero of="$TARGET_DEVICE" bs=1M count=10 status=none 2>&1 | tee -a "$LOG_FILE" || true
+    fi
     sync
     
     log_info "Creating new GPT partition table..."
@@ -1098,6 +1146,7 @@ phase_3_disk_preparation() {
 ################################################################################
 
 phase_4_luks_encryption() {
+    tui_phase_start "4" "LUKS Encryption" "Setting up full-disk encryption"
     log_section "PHASE 4: LUKS ENCRYPTION"
     
     local luks_passphrase
@@ -1264,6 +1313,7 @@ phase_4_luks_encryption() {
 ################################################################################
 
 phase_5_btrfs_filesystem() {
+    tui_phase_start "5" "BTRFS Filesystem" "Creating BTRFS filesystem and subvolumes"
     log_section "PHASE 5: BTRFS FILESYSTEM SETUP"
     
     local root_crypt_device="/dev/mapper/$LUKS_ROOT_NAME"
@@ -1414,6 +1464,7 @@ phase_5_btrfs_filesystem() {
 }
 
 phase_6_base_installation() {
+    tui_phase_start "6" "Base Installation" "Installing core Arch Linux system (this may take 5-15 minutes)"
     log_section "PHASE 6: BASE SYSTEM INSTALLATION (PACSTRAP)"
     
     log_info "Updating Pacman keyring..."
@@ -1462,6 +1513,10 @@ phase_6_base_installation() {
     packages_str=$(IFS=' '; echo "${packages[*]}")
     
     log_info "Installing base packages via pacstrap (${#packages[@]} packages)..."
+    
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        tui_info "PARSS - Base Installation" "Installing base system (${#packages[@]} packages)\n\nThis will take 5-15 minutes depending on network speed.\n\nPackages include: linux, grub, btrfs-progs,\nnetworkmanager, xorg, and more..."
+    fi
 
     if ! execute_cmd_retry "pacstrap -K $MOUNT_ROOT $packages_str" \
         "Installing base system packages" 2; then
@@ -1475,7 +1530,8 @@ phase_6_base_installation() {
 }
 
 phase_7_mount_configuration() {
-    log_section "PHASE 7: MOUNT CONFIGURATION & ENCRYPTION"
+    tui_phase_start "7" "Mount Configuration" "Configuring fstab and crypttab"
+    log_section "PHASE 7: MOUNT & CRYPTTAB CONFIGURATION & ENCRYPTION"
     
     log_info "Generating fstab from current mounts..."
     execute_cmd "genfstab -U $MOUNT_ROOT >> $MOUNT_ROOT/etc/fstab" "Generating fstab" true
@@ -1504,6 +1560,7 @@ EOF
 ################################################################################
 
 phase_8_chroot_configuration() {
+    tui_phase_start "8" "Bootloader Setup" "Configuring mkinitcpio and GRUB"
     log_section "PHASE 8: CHROOT ENVIRONMENT & BOOTLOADER"
     
     # ═══════════════════════════════════════════════════════════
@@ -1572,31 +1629,20 @@ phase_8_chroot_configuration() {
     # INSTALL GRUB BOOTLOADER
     # ═══════════════════════════════════════════════════════════
     
-    log_info "Installing GRUB to EFI System Partition..."
+    log_info "Installing GRUB to EFI partition..."
+    if [[ "$TUI_AVAILABLE" == "true" ]]; then
+        tui_info "PARSS - GRUB Installation" "Installing GRUB bootloader...\n\nTarget: x86_64-efi\nLocation: /boot\nBootloader ID: ArchLinux"
+    fi
     
-    # METHOD 1: Standard GRUB install
-    if arch-chroot "$MOUNT_ROOT" grub-install \
+    arch-chroot "$MOUNT_ROOT" grub-install \
         --target=x86_64-efi \
         --efi-directory=/boot \
-        --bootloader-id=GRUB 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "GRUB installed successfully"
-    else
-        local grub_exit=$?
-        log_warn "Standard GRUB install failed (exit code: $grub_exit)"
-        log_info "Attempting GRUB install with --removable flag..."
-        
-        # METHOD 2: Fallback - use --removable flag
-        # This creates a fallback boot path that works on more systems
-        if arch-chroot "$MOUNT_ROOT" grub-install \
-            --target=x86_64-efi \
-            --efi-directory=/boot \
-            --bootloader-id=GRUB \
-            --removable 2>&1 | tee -a "$LOG_FILE"; then
-            log_success "GRUB installed with --removable flag"
-        else
-            log_error "GRUB installation failed with all methods"
-            return 1
-        fi
+        --bootloader-id=ArchLinux \
+        --recheck 2>&1 | tee -a "$LOG_FILE"
+    
+    if [[ $? -ne 0 ]]; then
+        log_error "GRUB installation failed"
+        return 1
     fi
     
     # ═══════════════════════════════════════════════════════════
@@ -1729,6 +1775,7 @@ phase_8_chroot_configuration() {
 }
 
 phase_9_system_configuration() {
+    tui_phase_start "9" "System Configuration" "Setting hostname, locale, timezone, and networking"
     log_section "PHASE 9: SYSTEM CONFIGURATION"
     
     log_info "Configuring hostname..."
@@ -1805,6 +1852,7 @@ EOF
 }
 
 phase_10_user_setup() {
+    tui_phase_start "10" "User Setup" "Creating user account and setting passwords"
     log_section "PHASE 10: USER ACCOUNT SETUP"
     
     log_info "Creating primary user account: $PRIMARY_USER"
@@ -1869,6 +1917,7 @@ phase_10_user_setup() {
 }
 
 phase_11_security_hardening() {
+    tui_phase_start "11" "Security Hardening" "Applying kernel parameters and sysctl tuning"
     log_section "PHASE 11: SECURITY HARDENING"
     
     log_info "Creating security-hardened sysctl parameters..."
@@ -1894,6 +1943,7 @@ SYSCTL_CONFIG
 }
 
 phase_12_snapshot_automation() {
+    tui_phase_start "12" "Snapshot Automation" "Setting up automatic BTRFS snapshots"
     log_section "PHASE 12: BTRFS SNAPSHOT AUTOMATION"
     
     log_info "Creating BTRFS snapshot automation script..."
@@ -2281,6 +2331,7 @@ DESKTOP_SETUP_EOF
 }
 
 phase_13_final_verification() {
+    tui_phase_start "13" "Final Verification" "Verifying installation and unmounting filesystems"
     log_section "PHASE 13: FINAL VERIFICATION & UNMOUNTING"
     
     log_info "Verifying installation completeness..."
