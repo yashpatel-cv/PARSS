@@ -220,7 +220,7 @@ tui_msgbox() {
     local width="${4:-70}"
     
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        whiptail --title "$title" --msgbox "$message" $height $width
+        whiptail --title "$title" --msgbox "$message" "$height" "$width"
     else
         echo ""
         echo "═══════════════════════════════════════════════════════════"
@@ -240,7 +240,7 @@ tui_yesno() {
     local width="${4:-70}"
     
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        if whiptail --title "$title" --yesno "$question" $height $width; then
+        if whiptail --title "$title" --yesno "$question" "$height" "$width"; then
             return 0
         else
             return 1
@@ -293,7 +293,7 @@ tui_long_operation() {
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
         (
             for i in $(seq 0 5 100); do
-                echo $i
+                echo "$i"
                 sleep $((duration / 20))
             done
         ) | whiptail --title "$title" --gauge "$message" 8 70 0
