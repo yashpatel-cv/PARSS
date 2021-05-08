@@ -146,26 +146,96 @@ readonly RETRY_DELAY=5
 
 # Global TUI availability flag
 TUI_AVAILABLE=false
+TUI_USE_DIALOG=false
 
-# Initialize TUI (whiptail/dialog)
+# TUI output buffer file
+readonly TUI_OUTPUT_FILE="/tmp/parss-tui-output-$$.log"
+readonly TUI_STATUS_FILE="/tmp/parss-tui-status-$$.txt"
+
+# Initialize TUI (prefer dialog over whiptail for better features)
 init_tui() {
-    # Try to install whiptail if not present
-    if ! command -v whiptail >/dev/null 2>&1; then
-        log_info "Installing whiptail for enhanced UI..."
-        if pacman -Sy --noconfirm libnewt >/dev/null 2>&1; then
-            TUI_AVAILABLE=true
-            log_success "TUI enabled (whiptail)"
-        else
-            log_warn "Could not install whiptail, using text-only mode"
-            TUI_AVAILABLE=false
-        fi
-    else
+    # Check for dialog first (better features), then whiptail
+    if command -v dialog >/dev/null 2>&1; then
         TUI_AVAILABLE=true
+        TUI_USE_DIALOG=true
+        log_success "TUI enabled (dialog)"
+    elif command -v whiptail >/dev/null 2>&1; then
+        TUI_AVAILABLE=true
+        TUI_USE_DIALOG=false
+        log_success "TUI enabled (whiptail)"
+    else
+        # Try to install dialog for better TUI experience
+        log_info "Installing dialog for enhanced UI..."
+        if pacman -Sy --noconfirm dialog >/dev/null 2>&1; then
+            TUI_AVAILABLE=true
+            TUI_USE_DIALOG=true
+            log_success "TUI enabled (dialog)"
+        else
+            log_warn "Could not install TUI tools, using text-only mode"
+            TUI_AVAILABLE=false
+            return
+        fi
     fi
 
-    # Configure whiptail colors: black background with colored text
+    # Initialize TUI output files
+    touch "$TUI_OUTPUT_FILE"
+    echo "PARSS Installation Started" > "$TUI_STATUS_FILE"
+
+    # Configure colors for dialog/whiptail: black background with colored text
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        export NEWT_COLORS="
+        if [[ "$TUI_USE_DIALOG" == "true" ]]; then
+            # Dialog uses different color configuration
+            export DIALOGRC="/tmp/parss-dialogrc-$$"
+            cat > "$DIALOGRC" << 'EOF'
+# PARSS Dialog Configuration - Black background with cyan accents
+use_shadow = OFF
+use_colors = ON
+
+# Screen/window colors
+screen_color = (WHITE,BLACK,OFF)
+shadow_color = (BLACK,BLACK,OFF)
+
+# Dialog box colors
+dialog_color = (WHITE,BLACK,OFF)
+title_color = (BRIGHTWHITE,BLACK,ON)
+border_color = (BRIGHTCYAN,BLACK,ON)
+
+# Text and input
+inputbox_color = (WHITE,BLACK,OFF)
+inputbox_border_color = (BRIGHTCYAN,BLACK,ON)
+
+# Buttons
+button_active_color = (WHITE,CYAN,ON)
+button_inactive_color = (BLACK,CYAN,OFF)
+button_key_active_color = (WHITE,CYAN,ON)
+button_key_inactive_color = (BRIGHTWHITE,CYAN,OFF)
+button_label_active_color = (WHITE,CYAN,ON)
+button_label_inactive_color = (BLACK,CYAN,OFF)
+
+# Menu/list colors
+menubox_color = (WHITE,BLACK,OFF)
+menubox_border_color = (BRIGHTCYAN,BLACK,ON)
+item_color = (WHITE,BLACK,OFF)
+item_selected_color = (BLACK,CYAN,ON)
+tag_color = (BRIGHTCYAN,BLACK,ON)
+tag_selected_color = (WHITE,CYAN,ON)
+tag_key_color = (BRIGHTWHITE,BLACK,ON)
+tag_key_selected_color = (BRIGHTWHITE,CYAN,ON)
+
+# Progress/gauge
+gauge_color = (WHITE,CYAN,ON)
+
+# Text box
+textbox_color = (WHITE,BLACK,OFF)
+textbox_border_color = (BRIGHTCYAN,BLACK,ON)
+
+# Other elements
+form_active_text_color = (WHITE,BLACK,ON)
+form_text_color = (WHITE,BLACK,OFF)
+EOF
+        else
+            # Whiptail uses NEWT_COLORS
+            export NEWT_COLORS="
 root=white,black
 window=white,black
 border=brightcyan,black
@@ -184,6 +254,132 @@ actlistbox=white,cyan
 sellistbox=black,cyan
 actsellistbox=black,cyan
 "
+        fi
+    fi
+}
+
+# Cleanup TUI resources
+cleanup_tui() {
+    rm -f "$TUI_OUTPUT_FILE" "$TUI_STATUS_FILE" "$DIALOGRC" 2>/dev/null
+}
+
+# Update TUI status (persistent display)
+tui_update_status() {
+    local phase="$1"
+    local operation="$2"
+
+    echo "$phase: $operation" > "$TUI_STATUS_FILE"
+}
+
+# Show persistent log viewer in background (tailbox)
+tui_show_log_viewer() {
+    if [[ "$TUI_AVAILABLE" != "true" ]]; then
+        return
+    fi
+
+    local title="$1"
+    local height="${2:-20}"
+    local width="${3:-78}"
+
+    if [[ "$TUI_USE_DIALOG" == "true" ]]; then
+        # Use dialog's tailboxbg for live log viewing (background process)
+        dialog --title "$title" --tailboxbg "$TUI_OUTPUT_FILE" "$height" "$width" &
+        TUI_LOG_VIEWER_PID=$!
+    else
+        # Whiptail doesn't have tailbox, use textbox with periodic updates
+        (
+            while true; do
+                if [[ -f "$TUI_OUTPUT_FILE" ]]; then
+                    whiptail --title "$title" --textbox "$TUI_OUTPUT_FILE" "$height" "$width" 2>/dev/null
+                fi
+                sleep 2
+            done
+        ) &
+        TUI_LOG_VIEWER_PID=$!
+    fi
+}
+
+# Close log viewer
+tui_close_log_viewer() {
+    if [[ -n "${TUI_LOG_VIEWER_PID:-}" ]]; then
+        kill "$TUI_LOG_VIEWER_PID" 2>/dev/null || true
+        unset TUI_LOG_VIEWER_PID
+    fi
+}
+
+# Execute command with TUI output capture
+tui_exec() {
+    local title="$1"
+    local description="$2"
+    shift 2
+    local cmd="$*"
+
+    # Update status
+    tui_update_status "$title" "$description"
+
+    # Log to both file and console
+    echo "" >> "$TUI_OUTPUT_FILE"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >> "$TUI_OUTPUT_FILE"
+    echo "[$title] $description" >> "$TUI_OUTPUT_FILE"
+    echo "Command: $cmd" >> "$TUI_OUTPUT_FILE"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >> "$TUI_OUTPUT_FILE"
+
+    # Execute and capture output
+    if eval "$cmd" 2>&1 | tee -a "$TUI_OUTPUT_FILE" "$LOG_FILE"; then
+        echo "[✓] Success: $description" >> "$TUI_OUTPUT_FILE"
+        return 0
+    else
+        local exit_code=$?
+        echo "[✗] Failed: $description (exit code: $exit_code)" >> "$TUI_OUTPUT_FILE"
+        return $exit_code
+    fi
+}
+
+# Show live progress window with command execution
+tui_exec_with_progress() {
+    local title="$1"
+    local description="$2"
+    shift 2
+    local cmd="$*"
+
+    if [[ "$TUI_AVAILABLE" != "true" ]]; then
+        # Fallback to regular execution
+        log_info "$description"
+        eval "$cmd" 2>&1 | tee -a "$LOG_FILE"
+        return $?
+    fi
+
+    # Show progress in TUI
+    echo "" > "$TUI_OUTPUT_FILE"
+    echo "[$title] $description" > "$TUI_OUTPUT_FILE"
+    echo "" >> "$TUI_OUTPUT_FILE"
+    echo "Executing..." >> "$TUI_OUTPUT_FILE"
+
+    if [[ "$TUI_USE_DIALOG" == "true" ]]; then
+        # Use dialog's progressbox for live output
+        eval "$cmd" 2>&1 | tee -a "$LOG_FILE" | dialog --title "$title" --progressbox "$description" 20 78
+        return ${PIPESTATUS[0]}
+    else
+        # For whiptail, show in background and use gauge
+        (eval "$cmd" 2>&1 | tee -a "$TUI_OUTPUT_FILE" "$LOG_FILE") &
+        local cmd_pid=$!
+
+        # Show activity indicator
+        (
+            local i=0
+            while kill -0 $cmd_pid 2>/dev/null; do
+                i=$(( (i + 10) % 100 ))
+                echo "$i"
+                echo "XXX"
+                echo "$description"
+                echo "XXX"
+                sleep 1
+            done
+            echo "100"
+        ) | whiptail --title "$title" --gauge "$description" 8 70 0
+
+        wait $cmd_pid
+        return $?
     fi
 }
 
@@ -192,8 +388,17 @@ tui_info() {
     local title="$1"
     local message="$2"
 
+    # Also append to TUI output file
+    if [[ -f "$TUI_OUTPUT_FILE" ]]; then
+        echo "[INFO] $message" >> "$TUI_OUTPUT_FILE"
+    fi
+
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        whiptail --title "$title" --infobox "$message" 8 70
+        if [[ "$TUI_USE_DIALOG" == "true" ]]; then
+            dialog --title "$title" --infobox "$message" 8 70
+        else
+            whiptail --title "$title" --infobox "$message" 8 70
+        fi
     fi
     # Always log to console too
     log_info "$message"
@@ -206,7 +411,11 @@ tui_gauge() {
     local percent="$3"
 
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        echo "$percent" | whiptail --title "$title" --gauge "$message" 8 70 0
+        if [[ "$TUI_USE_DIALOG" == "true" ]]; then
+            echo "$percent" | dialog --title "$title" --gauge "$message" 8 70 0
+        else
+            echo "$percent" | whiptail --title "$title" --gauge "$message" 8 70 0
+        fi
     else
         log_info "[$percent%] $message"
     fi
@@ -220,14 +429,18 @@ tui_msgbox() {
     local width="${4:-70}"
 
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        whiptail --title "$title" --msgbox "$message" "$height" "$width"
+        if [[ "$TUI_USE_DIALOG" == "true" ]]; then
+            dialog --title "$title" --msgbox "$message" "$height" "$width"
+        else
+            whiptail --title "$title" --msgbox "$message" "$height" "$width"
+        fi
     else
         echo ""
-        echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+        echo "═══════════════════════════════════════════════════════════"
         echo "$title"
-        echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+        echo "═══════════════════════════════════════════════════════════"
         echo "$message"
-        echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+        echo "═══════════════════════════════════════════════════════════"
         read -p "Press Enter to continue..."
     fi
 }
@@ -240,18 +453,26 @@ tui_yesno() {
     local width="${4:-70}"
 
     if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        if whiptail --title "$title" --yesno "$question" "$height" "$width"; then
-            return 0
+        if [[ "$TUI_USE_DIALOG" == "true" ]]; then
+            if dialog --title "$title" --yesno "$question" "$height" "$width"; then
+                return 0
+            else
+                return 1
+            fi
         else
-            return 1
+            if whiptail --title "$title" --yesno "$question" "$height" "$width"; then
+                return 0
+            else
+                return 1
+            fi
         fi
     else
         echo ""
-        echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+        echo "═══════════════════════════════════════════════════════════"
         echo "$title"
-        echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+        echo "═══════════════════════════════════════════════════════════"
         echo "$question"
-        echo "â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
+        echo "═══════════════════════════════════════════════════════════"
         read -p "Continue? (y/N): " response
         [[ "$response" =~ ^[yY]$ ]] && return 0 || return 1
     fi
@@ -331,6 +552,10 @@ trap 'trap_error ${LINENO}' ERR
 # Cleanup function for error scenarios
 cleanup_on_error() {
     log_warn "Attempting emergency cleanup..."
+
+    # Close TUI log viewer and cleanup
+    tui_close_log_viewer
+    cleanup_tui
 
     # Recursive unmount of target root
     if [[ -n "${MOUNT_ROOT:-}" && -d "$MOUNT_ROOT" ]]; then
@@ -2595,6 +2820,10 @@ main() {
     log_info "Installation log: $LOG_FILE"
     log_info "Installation completed: $(date)"
     log_info ""
+
+    # Cleanup TUI resources
+    tui_close_log_viewer
+    cleanup_tui
 }
 
 # Execute main
