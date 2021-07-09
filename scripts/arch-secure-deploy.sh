@@ -1824,22 +1824,22 @@ TIMER
 
 phase_14_optional_desktop_setup() {
     # Show TUI or text-based prompt
-    local prompt_message="ðŸŽ‰ Congratulations! Your secure base system is ready!
+    local prompt_message=" Congratulations! Your secure base system is ready!
 
 The next step is OPTIONAL but RECOMMENDED:
 Install complete desktop environment (DWM + Dotfiles)
 
 ðŸ“¦ WHAT WILL BE INSTALLED:
-  â€¢ archrice dotfiles (personal configs)
-  â€¢ yay AUR helper (for AUR packages)
-  â€¢ DWM window manager (lightweight, keyboard-driven)
-  â€¢ ST terminal, dmenu, dwmblocks
-  â€¢ Moonfly OLED theme (optimized for OLED displays)
-  â€¢ ~60 packages from progs.csv
-  â€¢ Librewolf browser + extensions
-  â€¢ Development tools (neovim, git, etc.)
+  - archrice dotfiles (personal configs)
+  - yay AUR helper (for AUR packages)
+  - DWM window manager (lightweight, keyboard-driven)
+  - ST terminal, dmenu, dwmblocks
+  - Moonfly OLED theme (optimized for OLED displays)
+  - ~60 packages from progs.csv
+  - Librewolf browser + extensions
+  - Development tools (neovim, git, etc.)
 
-âš¡ ADVANTAGES:
+ ADVANTAGES:
   âœ“ No reboot needed - continue immediately
   âœ“ Network already configured
   âœ“ Faster testing workflow
@@ -1847,7 +1847,7 @@ Install complete desktop environment (DWM + Dotfiles)
 
 â±ï¸⏱️  TIME: 10-30 minutes (network dependent)
 
-💡 TIP: Can install later with:
+ TIP: Can install later with:
    sudo bash arch-secure-deploy.sh --phase 14"
 
     # Use TUI if available, otherwise text prompt
@@ -2072,11 +2072,11 @@ mkdir -p /root/.config 2>/dev/null
 
 info ""
 info "OLED/HiDPI Setup Complete:"
-info "  â€¢ Moonfly OLED: Pure black #000000 (OLED pixels off)"
-info "  â€¢ DPI: \$dpi for \$resolution display"
-info "  â€¢ Wallpaper: Black (zero power)"
-info "  â€¢ DWM: No gaps (maximize space)"
-info "  â€¢ Root/user: Same theme"
+info "  - Moonfly OLED: Pure black #000000 (OLED pixels off)"
+info "  - DPI: \$dpi for \$resolution display"
+info "  - Wallpaper: Black (zero power)"
+info "  - DWM: No gaps (maximize space)"
+info "  - Root/user: Same theme"
 info ""
 info "After reboot: login and run 'startx'"
 
@@ -2350,10 +2350,10 @@ main() {
         log_info "   sudo bash scripts/arch-secure-deploy.sh --phase 14"
         log_info ""
         log_info "This will:"
-        log_info "  â€¢ Clone your archrice dotfiles (https://github.com/yashpatel-01/archrice)"
-        log_info "  â€¢ Install packages from progs.csv (suckless tools, browsers, etc.)"
-        log_info "  â€¢ Deploy dotfiles to your home directory"
-        log_info "  â€¢ Build suckless software (dwm, st, dmenu, slstatus)"
+        log_info "  - Clone your archrice dotfiles (https://github.com/yashpatel-01/archrice)"
+        log_info "  - Install packages from progs.csv (suckless tools, browsers, etc.)"
+        log_info "  - Deploy dotfiles to your home directory"
+        log_info "  - Build suckless software (dwm, st, dmenu, slstatus)"
         log_info ""
         log_info "After phase 14 completes, reboot and run 'startx' to launch your environment."
         log_info ""
