@@ -1823,13 +1823,12 @@ TIMER
 }
 
 phase_14_optional_desktop_setup() {
-    # Show TUI or text-based prompt
     local prompt_message=" Congratulations! Your secure base system is ready!
 
 The next step is OPTIONAL but RECOMMENDED:
 Install complete desktop environment (DWM + Dotfiles)
 
-ðŸ“¦ WHAT WILL BE INSTALLED:
+WHAT WILL BE INSTALLED:
   - archrice dotfiles (personal configs)
   - yay AUR helper (for AUR packages)
   - DWM window manager (lightweight, keyboard-driven)
@@ -1839,50 +1838,40 @@ Install complete desktop environment (DWM + Dotfiles)
   - Librewolf browser + extensions
   - Development tools (neovim, git, etc.)
 
- ADVANTAGES:
+ADVANTAGES:
    * No reboot needed - continue immediately
    * Network already configured
    * Faster testing workflow
    * Complete system ready in one session
 
- *ï¸  TIME: 10-30 minutes (network dependent)
+TIME: 10-30 minutes (network dependent)
 
 TIP: Can install later with:
    sudo bash arch-secure-deploy.sh --phase 14"
 
-    # Use TUI if available, otherwise text prompt
-    if [[ "$TUI_AVAILABLE" == "true" ]]; then
-        if ! tui_yesno "PHASE 14: Desktop Environment" "$prompt_message" 25 78; then
-            log_info "Desktop environment installation skipped by user"
-            save_state "DESKTOP_SETUP_SKIPPED" "true"
-            log_success "Phase 14 skipped"
-            return 0
-        fi
-    else
-        # Fallback to text-based prompt
-        echo ""
-        echo ""
-        echo "==============================================================================="
-        echo "                 DESKTOP ENVIRONMENT INSTALLATION"
-        echo "                          ** PHASE 14 **"
-        echo "==============================================================================="
-        echo ""
-        echo "$prompt_message"
-        echo ""
-        echo "==============================================================================="
-        echo "               INSTALL DESKTOP ENVIRONMENT NOW?"
-        echo "==============================================================================="
-        echo ""
+    # Desktop environment prompt
+    echo ""
+    echo ""
+    echo "==============================================================================="
+    echo "                 DESKTOP ENVIRONMENT INSTALLATION"
+    echo "                          ** PHASE 14 **"
+    echo "==============================================================================="
+    echo ""
+    echo "$prompt_message"
+    echo ""
+    echo "==============================================================================="
+    echo "               INSTALL DESKTOP ENVIRONMENT NOW?"
+    echo "==============================================================================="
+    echo ""
 
-        local response
-        read -p "  Your choice (y/N): " response
+    local response
+    read -p "  Your choice (y/N): " response
 
-        if [[ ! "$response" =~ ^[yY]$ ]]; then
-            log_info "Skipping desktop environment setup."
-            save_state "DESKTOP_SETUP_SKIPPED" "true"
-            log_success "Phase 14 skipped by user"
-            return 0
-        fi
+    if [[ ! "$response" =~ ^[yY]$ ]]; then
+        log_info "Skipping desktop environment setup."
+        save_state "DESKTOP_SETUP_SKIPPED" "true"
+        log_success "Phase 14 skipped by user"
+        return 0
     fi
 
     log_info "Starting desktop environment installation..."
