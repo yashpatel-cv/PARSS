@@ -2318,7 +2318,7 @@ main() {
 
     # Only show manual instructions if desktop was NOT installed
     if [[ "${DESKTOP_SETUP_COMPLETE:-false}" != "true" ]]; then
-        log_info " * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *  *
+        log_info "=================================================================================="
         log_info ""
         log_info "OPTIONAL: Desktop Environment & Dotfiles Setup"
         log_info ""
