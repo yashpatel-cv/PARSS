@@ -2346,7 +2346,7 @@ main() {
         log_info ""
         log_info "After phase 14 completes, reboot and run 'startx' to launch your environment."
         log_info ""
-        log_info " * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *  *
+        log_info "=================================================================================="
         log_info ""
     fi
     log_info "Installation log: $LOG_FILE"
