@@ -2219,7 +2219,7 @@ run_integrity_check() {
         else
             echo "Skipping AIDE installation."
         fi
-        read -p "Press Enter to return to menu..."
+        [[ "${MENU_MODE:-false}" == "true" ]] && read -p "Press Enter to return to menu..."
         return 0
     fi
 
