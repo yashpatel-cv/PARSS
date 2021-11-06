@@ -356,18 +356,19 @@ confirm_destructive_operation() {
     local size_gb
     size_gb=$(lsblk -bnd -o SIZE "$device" | awk '{printf "%.0f", $1/(1024**3)}')
 
-    echo "" >&2
-    echo -e "${RED}=============================================================${NC}" >&2
-    echo -e "${RED}            ** DESTRUCTIVE OPERATION WARNING **${NC}" >&2
-    echo -e "${RED}=============================================================${NC}" >&2
-    echo "" >&2
-    echo "WARNING: This will DESTROY all data on the selected device!" >&2
-    echo "  1. Confirm you selected the CORRECT device" >&2
-    echo "  2. Confirm you have backed up all important data" >&2
-    echo "  3. Type 'y' or 'Y' to proceed" >&2
-    echo "" >&2
+    {
+        echo ""
+        echo -e "${RED}=============================================================${NC}"
+        echo -e "${RED}            ** DESTRUCTIVE OPERATION WARNING **${NC}"
+        echo -e "${RED}=============================================================${NC}"
+        echo ""
+        echo "WARNING: This will DESTROY all data on $device ($size_gb GB)!"
+        echo "  1. Confirm you selected the CORRECT device"
+        echo "  2. Confirm you have backed up all important data"
+        echo ""
+    } >&2
     read -p "Type 'y' or 'Y' to confirm: " confirmation
-    echo
+    echo >&2
 
     if [[ ! "$confirmation" =~ ^[yY]([eE][sS])?$ ]]; then
         log_error "Operation cancelled by user"
@@ -431,22 +432,24 @@ validate_passphrase_strength() {
 prompt_luks_passphrase() {
     log_section "LUKS ENCRYPTION PASSPHRASE SETUP"
 
-    echo "" >&2
-    echo -e "${CYAN}=============================================================${NC}" >&2
-    echo -e "${CYAN}                  ENCRYPTION PASSPHRASE SETUP                    ${NC}" >&2
-    echo -e "${CYAN}=============================================================${NC}" >&2
-    echo "" >&2
-    echo "Passphrase Requirements:" >&2
-    echo "  - Minimum 12 characters" >&2
-    echo "  - At least one uppercase letter (A-Z)" >&2
-    echo "  - At least one lowercase letter (a-z)" >&2
-    echo "  - At least one number (0-9)" >&2
-    echo "  - Special characters recommended" >&2
-    echo "" >&2
-    echo -e "${YELLOW}  You will need this passphrase to boot your system every time${NC}" >&2
-    echo -e "${YELLOW}  Write it down and store it in a secure location${NC}" >&2
-    echo -e "${YELLOW}  This passphrase will unlock the encrypted root partition (containing all BTRFS subvolumes)${NC}" >&2
-    echo "" >&2
+    {
+        echo ""
+        echo -e "${CYAN}=============================================================${NC}"
+        echo -e "${CYAN}                  ENCRYPTION PASSPHRASE SETUP                ${NC}"
+        echo -e "${CYAN}=============================================================${NC}"
+        echo ""
+        echo "Passphrase Requirements:"
+        echo "  - Minimum 12 characters"
+        echo "  - At least one uppercase letter (A-Z)"
+        echo "  - At least one lowercase letter (a-z)"
+        echo "  - At least one number (0-9)"
+        echo "  - Special characters recommended"
+        echo ""
+        echo -e "${YELLOW}  You will need this passphrase to boot your system every time${NC}"
+        echo -e "${YELLOW}  Write it down and store it in a secure location${NC}"
+        echo -e "${YELLOW}  This passphrase will unlock the encrypted root partition${NC}"
+        echo ""
+    } >&2
 
     local passphrase=""
     local passphrase_confirm=""
@@ -484,30 +487,26 @@ prompt_luks_passphrase() {
 
 # Prompt for partition size
 prompt_partition_size() {
-    echo "" >&2
-    echo -e "${CYAN}=============================================================${NC}" >&2
-    echo -e "${CYAN}        CUSTOM PARTITION SIZE CONFIGURATION${NC}" >&2
-    echo -e "${CYAN}=============================================================${NC}" >&2
-    echo "" >&2
-    echo "Total available space: ${AVAILABLE_SPACE_GB}GB" >&2
-    echo "" >&2
-    echo "Configuration:" >&2
-    echo "  1. EFI System Partition: 1GB (FAT32)" >&2
-    echo "  2. Root partition with BTRFS subvolumes (@, @home, @var, @snapshots, etc.): All remaining space" >&2
-    echo "" >&2
-    echo "BTRFS subvolumes will be created on the root partition:" >&2
-    echo "  - @ (root filesystem)" >&2
-    echo "  - @home (user home directories)" >&2
-    echo "  - @var (variable data)" >&2
-    echo "  - @snapshots (BTRFS snapshots)" >&2
-    echo "  - @varcache (package cache)" >&2
-    echo "  - @log (system logs)" >&2
-    echo "" >&2
-    echo -e "${GREEN}Partition Layout:${NC}" >&2
-    echo "  EFI System Partition: 1GB" >&2
-    echo "  Root partition:       $((AVAILABLE_SPACE_GB - 1))GB (all BTRFS subvolumes)" >&2
-    echo "  Total:                ${AVAILABLE_SPACE_GB}GB" >&2
-    echo "" >&2
+    {
+        echo ""
+        echo -e "${CYAN}=============================================================${NC}"
+        echo -e "${CYAN}        CUSTOM PARTITION SIZE CONFIGURATION${NC}"
+        echo -e "${CYAN}=============================================================${NC}"
+        echo ""
+        echo "Total available space: ${AVAILABLE_SPACE_GB}GB"
+        echo ""
+        echo "Configuration:"
+        echo "  1. EFI System Partition: 1GB (FAT32)"
+        echo "  2. Root partition with BTRFS subvolumes: All remaining space"
+        echo ""
+        echo "BTRFS subvolumes on root partition:"
+        echo "  - @ (root)      - @home (user data)   - @var (variable)"
+        echo "  - @snapshots    - @varcache (cache)   - @log (logs)"
+        echo ""
+        echo -e "${GREEN}Partition Layout:${NC}"
+        echo "  EFI:  1GB                Root: $((AVAILABLE_SPACE_GB - 1))GB"
+        echo ""
+    } >&2
     read -p "Proceed with this configuration? (y/n) [y]: " confirm_partition
     confirm_partition=${confirm_partition:-y}
 
@@ -590,20 +589,20 @@ phase_1b_interactive_configuration() {
 
     log_section "PHASE 1B: INTERACTIVE SYSTEM CONFIGURATION"
 
-    echo "" >&2
-    echo -e "${CYAN}=============================================================${NC}" >&2
-    echo -e "${CYAN}         CUSTOM SYSTEM CONFIGURATION (Interactive)          ${NC}" >&2
-    echo -e "${CYAN}=============================================================${NC}" >&2
-    echo "" >&2
-    echo "This script will ask for custom names and settings." >&2
-    echo "Press Enter to use default values shown in [brackets]" >&2
-    echo "" >&2
+    {
+        echo ""
+        echo -e "${CYAN}=============================================================${NC}"
+        echo -e "${CYAN}         CUSTOM SYSTEM CONFIGURATION (Interactive)          ${NC}"
+        echo -e "${CYAN}=============================================================${NC}"
+        echo ""
+        echo "This script will ask for custom names and settings."
+        echo "Press Enter to use default values shown in [brackets]"
+        echo ""
+    } >&2
 
     # SECTION 1: SYSTEM IDENTIFICATION
     log_info "SECTION 1: System Identification"
-    echo "" >&2
 
-    log_info "Enter system hostname (computer name)"
     echo "Examples: thinkpad-research, arch-laptop, secure-dev" >&2
     read -p "Hostname [devta]: " input_hostname
     HOSTNAME_SYS="${input_hostname:-devta}"
@@ -664,25 +663,27 @@ phase_1b_interactive_configuration() {
     log_success "Snapshot retention: $SNAPSHOT_RETENTION"
 
     log_info "System timezone"
-    echo "" >&2
-    echo "Common timezones:" >&2
-    echo "  UTC                     (Universal Coordinated Time)" >&2
-    echo "  America/New_York        (US Eastern)" >&2
-    echo "  America/Chicago         (US Central)" >&2
-    echo "  America/Denver          (US Mountain)" >&2
-    echo "  America/Los_Angeles     (US Pacific)" >&2
-    echo "  Europe/London           (UK)" >&2
-    echo "  Europe/Paris            (Central Europe)" >&2
-    echo "  Asia/Tokyo              (Japan)" >&2
-    echo "  Asia/Shanghai           (China)" >&2
-    echo "  Asia/Kolkata            (India)" >&2
-    echo "  Australia/Sydney        (Australia)" >&2
-    echo "" >&2
-    echo "To find your timezone:" >&2
-    echo "  - List all: timedatectl list-timezones" >&2
-    echo "  - Search:   timedatectl list-timezones | grep -i <region>" >&2
-    echo "  - Example:  timedatectl list-timezones | grep -i america" >&2
-    echo "" >&2
+    cat >&2 << 'EOF'
+
+Common timezones:
+  UTC                     (Universal Coordinated Time)
+  America/New_York        (US Eastern)
+  America/Chicago         (US Central)
+  America/Denver          (US Mountain)
+  America/Los_Angeles     (US Pacific)
+  Europe/London           (UK)
+  Europe/Paris            (Central Europe)
+  Asia/Tokyo              (Japan)
+  Asia/Shanghai           (China)
+  Asia/Kolkata            (India)
+  Australia/Sydney        (Australia)
+
+To find your timezone:
+  - List all: timedatectl list-timezones
+  - Search:   timedatectl list-timezones | grep -i <region>
+  - Example:  timedatectl list-timezones | grep -i america
+
+EOF
     read -p "Enter timezone [UTC]: " input_timezone
     SYSTEM_TIMEZONE="${input_timezone:-UTC}"
 
@@ -1818,46 +1819,38 @@ TIMER
 }
 
 phase_14_optional_desktop_setup() {
-    local prompt_message=" Congratulations! Your secure base system is ready!
+    # Desktop environment prompt
+    cat >&2 << 'EOF'
+
+===============================================================================
+                 DESKTOP ENVIRONMENT INSTALLATION
+                          ** PHASE 14 **
+===============================================================================
+
+Congratulations! Your secure base system is ready!
 
 The next step is OPTIONAL but RECOMMENDED:
 Install complete desktop environment (DWM + Dotfiles)
 
 WHAT WILL BE INSTALLED:
-  - archrice dotfiles (personal configs)
-  - yay AUR helper (for AUR packages)
-  - DWM window manager (lightweight, keyboard-driven)
-  - ST terminal, dmenu, dwmblocks
-  - Moonfly OLED theme (optimized for OLED displays)
-  - ~60 packages from progs.csv
-  - Librewolf browser + extensions
-  - Development tools (neovim, git, etc.)
+  - archrice dotfiles       - yay AUR helper
+  - DWM window manager      - ST terminal, dmenu
+  - Moonfly OLED theme      - ~60 packages from progs.csv
+  - Librewolf browser       - Development tools (neovim, git)
 
 ADVANTAGES:
-   * No reboot needed - continue immediately
-   * Network already configured
-   * Faster testing workflow
-   * Complete system ready in one session
+  * No reboot needed        * Network already configured
+  * Complete system ready in one session
 
 TIME: 10-30 minutes (network dependent)
 
-TIP: Can install later with:
-   sudo bash arch-secure-deploy.sh --phase 14"
+TIP: Can install later with: sudo bash arch-secure-deploy.sh --phase 14
 
-    # Desktop environment prompt
-    echo "" >&2
-    echo "" >&2
-    echo "===============================================================================" >&2
-    echo "                 DESKTOP ENVIRONMENT INSTALLATION" >&2
-    echo "                          ** PHASE 14 **" >&2
-    echo "===============================================================================" >&2
-    echo "" >&2
-    echo "$prompt_message" >&2
-    echo "" >&2
-    echo "===============================================================================" >&2
-    echo "               INSTALL DESKTOP ENVIRONMENT NOW?" >&2
-    echo "===============================================================================" >&2
-    echo "" >&2
+===============================================================================
+               INSTALL DESKTOP ENVIRONMENT NOW?
+===============================================================================
+
+EOF
     local response
     read -p "  Your choice (y/N): " response
 
