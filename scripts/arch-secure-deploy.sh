@@ -684,22 +684,38 @@ To find your timezone:
   - Example:  timedatectl list-timezones | grep -i america
 
 EOF
-    read -p "Enter timezone [UTC]: " input_timezone
-    SYSTEM_TIMEZONE="${input_timezone:-UTC}"
-
-    # Validate timezone exists
-    if [[ ! -f "/usr/share/zoneinfo/$SYSTEM_TIMEZONE" ]]; then
-        log_warn "Timezone '$SYSTEM_TIMEZONE' not found, using UTC"
-        SYSTEM_TIMEZONE="UTC"
-    fi
-    log_success "Timezone: $SYSTEM_TIMEZONE"
+    
+    # Loop until valid timezone is entered
+    while true; do
+        read -p "Enter timezone [America/New_York]: " input_timezone
+        SYSTEM_TIMEZONE="${input_timezone:-America/New_York}"
+        
+        # Validate timezone exists
+        if [[ -f "/usr/share/zoneinfo/$SYSTEM_TIMEZONE" ]]; then
+            log_success "Timezone: $SYSTEM_TIMEZONE"
+            break
+        else
+            log_warn "Timezone '$SYSTEM_TIMEZONE' not found. Please try again."
+            echo "Hint: Use exact format like 'America/New_York' (case-sensitive)" >&2
+        fi
+    done
 
     # CONFIRMATION
     log_info ""
     log_info "============================================================="
     log_info "INSTALLATION SUMMARY - Please Review"
     log_info "============================================================="
-    echo "" >&2
+    {
+        echo ""
+        echo "  Hostname:               $HOSTNAME_SYS"
+        echo "  Username:               $PRIMARY_USER"
+        echo "  LUKS device name:       $LUKS_ROOT_NAME"
+        echo "  BTRFS @log subvolume:   $ADD_LOG_SUBVOLUME"
+        echo "  NVIDIA GPU drivers:     $ENABLE_NVIDIA_GPU"
+        echo "  Snapshot retention:     $SNAPSHOT_RETENTION weeks"
+        echo "  System timezone:        $SYSTEM_TIMEZONE"
+        echo ""
+    } >&2
     read -p "Proceed with installation? (type 'y' to confirm): " final_confirm
 
     if [[ ! "$final_confirm" =~ ^[yY]([eE][sS])?$ ]]; then
