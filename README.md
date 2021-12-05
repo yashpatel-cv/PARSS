@@ -19,7 +19,7 @@ This repo currently contains a primary installer plus supporting tools and docs.
   - `scripts/system-health.sh` — service, crypto, and BTRFS health dashboard.
   - `scripts/integrity-check.sh` — AIDE-based filesystem integrity checks.
   - `scripts/btrfs-dashboard.sh` — quick BTRFS layout/usage overview.
-  - `scripts/desktop-setup.sh` — **optional** desktop/dotfiles setup using your `archrice` repo and an optional `progs.csv`.
+  - Phase 14 of `scripts/arch-secure-deploy.sh` — **optional** desktop/dotfiles setup using your `archrice` repo and an optional `progs.csv`.
 - **Docs**
   - `docs/PARSS-MANUAL.md` — single F1-style manual (install recap, maintenance, recovery, health checks).
   - `docs/PARSS-CHANGES.md` — changelog / design history.
@@ -73,11 +73,11 @@ On the **installed system**, as your primary user:
 cd ~
 git clone https://github.com/yashpatel-01/PARSS.git
 cd PARSS/scripts
-chmod +x desktop-setup.sh
-./desktop-setup.sh
+chmod +x arch-secure-deploy.sh
+./arch-secure-deploy.sh --phase 14
 ```
 
-`desktop-setup.sh` will:
+Phase 14 (desktop setup) will:
 
 - Clone or update your **archrice** dotfiles repo (defaults to
   `https://github.com/yashpatel-01/archrice.git`).
@@ -148,7 +148,7 @@ PARSS is designed for **security-focused, repeatable installs** with optional de
 | **BTRFS snapshots** | ✅ Automated weekly | ❌ Manual only | ❌ None |
 | **Multi-kernel** | ✅ linux-zen + linux-lts | ❌ Single kernel | ❌ N/A |
 | **Desktop profiles** | ❌ Optional post-install | ✅ KDE/GNOME/i3/etc. | ✅ dwm/i3 |
-| **Dotfiles** | ✅ Via desktop-setup.sh | ❌ None | ✅ voidrice |
+| **Dotfiles** | ✅ Via Phase 14 (desktop setup) | ❌ None | ✅ voidrice |
 | **Secure Boot/TPM2** | ❌ Not implemented | ✅ Supported | ❌ N/A |
 | **User interface** | Bash prompts | Python TUI menus | dialog TUI |
 | **Automation level** | High (few prompts) | Medium (many menus) | High (automated rice) |
