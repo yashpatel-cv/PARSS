@@ -2369,7 +2369,7 @@ if (( SCREEN_WIDTH > 0 )); then
         fi
         
         # Update cursor size based on DPI
-        local cursor_size=24
+        cursor_size=24
         (( DETECTED_DPI >= 192 )) && cursor_size=48
         (( DETECTED_DPI >= 144 && DETECTED_DPI < 192 )) && cursor_size=32
         
@@ -2383,7 +2383,7 @@ if (( SCREEN_WIDTH > 0 )); then
     # Also update GDK/QT scaling environment variables
     PROFILE_FILE="/home/$PRIMARY_USER/.config/shell/profile"
     if [[ -f "\$PROFILE_FILE" ]] && (( DETECTED_DPI >= 144 )); then
-        local scale_factor=1
+        scale_factor=1
         (( DETECTED_DPI >= 192 )) && scale_factor=2
         (( DETECTED_DPI >= 144 && DETECTED_DPI < 192 )) && scale_factor=1.5
         
