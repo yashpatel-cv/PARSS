@@ -1640,23 +1640,21 @@ EOF
     mkdir -p "$MOUNT_ROOT/etc/NetworkManager/dispatcher.d/pre-up.d" 2>/dev/null || true
     cat > "$MOUNT_ROOT/etc/NetworkManager/dispatcher.d/pre-up.d/10-rfkill-unblock" << 'RFKILL_SCRIPT'
 #!/bin/sh
-# Unblock WiFi if it's soft-blocked (common issue after fresh install)
-rfkill unblock wifi 2>/dev/null || true
-rfkill unblock wlan 2>/dev/null || true
+# Unblock all wireless devices (WiFi, Bluetooth, etc.) regardless of adapter name
+rfkill unblock all 2>/dev/null || true
 RFKILL_SCRIPT
     chmod +x "$MOUNT_ROOT/etc/NetworkManager/dispatcher.d/pre-up.d/10-rfkill-unblock" 2>/dev/null || true
 
     # Also create a systemd service to unblock rfkill at boot
     cat > "$MOUNT_ROOT/etc/systemd/system/rfkill-unblock.service" << 'RFKILL_SERVICE'
 [Unit]
-Description=Unblock WiFi rfkill
+Description=Unblock all wireless devices (rfkill)
 Before=NetworkManager.service
 After=systemd-rfkill.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/rfkill unblock wifi
-ExecStart=/usr/bin/rfkill unblock wlan
+ExecStart=/usr/bin/rfkill unblock all
 RemainAfterExit=yes
 
 [Install]
