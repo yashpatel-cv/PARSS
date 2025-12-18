@@ -2431,38 +2431,35 @@ else
 fi
 
 # ============================================================================
-# 11. Rebuild suckless tools (ensure they're compiled with user's config)
+# 11. Configure suckless tools BEFORE building (edit configs first)
 # ============================================================================
-info "Rebuilding suckless tools..."
+info "Configuring suckless tools..."
+
+# Configure DWM (set gaps to 0 BEFORE building)
+dwm_config="$REPODIR/dwm/config.h"
+if [[ -f "\$dwm_config" ]]; then
+    sed -i 's/^static const unsigned int gappih.*/static const unsigned int gappih = 0;/' "\$dwm_config" 2>/dev/null || true
+    sed -i 's/^static const unsigned int gappiv.*/static const unsigned int gappiv = 0;/' "\$dwm_config" 2>/dev/null || true
+    sed -i 's/^static const unsigned int gappoh.*/static const unsigned int gappoh = 0;/' "\$dwm_config" 2>/dev/null || true
+    sed -i 's/^static const unsigned int gappov.*/static const unsigned int gappov = 0;/' "\$dwm_config" 2>/dev/null || true
+    info " * DWM config: gaps set to 0"
+fi
+
+# ============================================================================
+# 12. Build suckless tools (AFTER config edits, build only once)
+# ============================================================================
+info "Building suckless tools..."
 
 for tool in dwm dwmblocks dmenu st; do
     if [[ -d "$REPODIR/\$tool" ]]; then
-        info " * Rebuilding \$tool..."
+        info " * Building \$tool..."
         cd "$REPODIR/\$tool"
         sudo -u $PRIMARY_USER make clean >/dev/null 2>&1 || true
         sudo -u $PRIMARY_USER make >/dev/null 2>&1 && make install >/dev/null 2>&1 || warn "Build failed: \$tool"
     fi
 done
 
-# ============================================================================
-# 12. DWM configuration (minimal gaps for clean look)
-# ============================================================================
-info "Configuring DWM..."
-
-dwm_config="$REPODIR/dwm/config.h"
-if [[ -f "\$dwm_config" ]]; then
-    # Minimal gaps for clean look
-    sed -i 's/^static const unsigned int gappih.*/static const unsigned int gappih = 0;/' "\$dwm_config" 2>/dev/null || true
-    sed -i 's/^static const unsigned int gappiv.*/static const unsigned int gappiv = 0;/' "\$dwm_config" 2>/dev/null || true
-    sed -i 's/^static const unsigned int gappoh.*/static const unsigned int gappoh = 0;/' "\$dwm_config" 2>/dev/null || true
-    sed -i 's/^static const unsigned int gappov.*/static const unsigned int gappov = 0;/' "\$dwm_config" 2>/dev/null || true
-
-    # Rebuild DWM
-    cd "$REPODIR/dwm"
-    sudo -u $PRIMARY_USER make clean >/dev/null 2>&1 || true
-    sudo -u $PRIMARY_USER make >/dev/null 2>&1 && make install >/dev/null 2>&1
-    info " * DWM configured (minimal gaps)"
-fi
+info " * Suckless tools built and installed"
 
 # ============================================================================
 # 13. Copy configs to root for consistent sudo experience (same vim UI)
