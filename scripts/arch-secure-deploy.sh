@@ -2290,6 +2290,120 @@ EndSection' >/etc/X11/xorg.conf.d/40-libinput.conf
 info " * System settings configured"
 
 # ============================================================================
+# 9b. AUTO-DETECT SCREEN RESOLUTION AND CONFIGURE DPI
+# ============================================================================
+info "Detecting screen resolution for DPI configuration..."
+
+# Try to detect screen resolution from DRM subsystem (works without X)
+detect_screen_resolution() {
+    local max_width=0
+    local max_height=0
+    
+    # Method 1: Parse DRM modes (works in TTY, most reliable)
+    for mode_file in /sys/class/drm/*/modes; do
+        if [[ -f "\$mode_file" ]]; then
+            while read -r mode; do
+                # Parse resolution like "3840x2400" or "1920x1080"
+                if [[ "\$mode" =~ ^([0-9]+)x([0-9]+) ]]; then
+                    local w="\${BASH_REMATCH[1]}"
+                    local h="\${BASH_REMATCH[2]}"
+                    if (( w > max_width )); then
+                        max_width=\$w
+                        max_height=\$h
+                    fi
+                fi
+            done < "\$mode_file"
+        fi
+    done
+    
+    # Method 2: Try xrandr if available (requires X)
+    if (( max_width == 0 )) && command -v xrandr >/dev/null 2>&1; then
+        local xrandr_res
+        xrandr_res=\$(xrandr 2>/dev/null | grep -oP '\d+x\d+' | head -1)
+        if [[ "\$xrandr_res" =~ ^([0-9]+)x([0-9]+) ]]; then
+            max_width="\${BASH_REMATCH[1]}"
+            max_height="\${BASH_REMATCH[2]}"
+        fi
+    fi
+    
+    echo "\$max_width \$max_height"
+}
+
+# Calculate appropriate DPI based on resolution
+# Assumes typical laptop screen sizes
+calculate_dpi() {
+    local width=\$1
+    local height=\$2
+    local dpi=96  # Default
+    
+    if (( width >= 3840 )); then
+        # 4K+ display (3840x2160, 3840x2400, etc.)
+        dpi=192  # 2x scaling
+    elif (( width >= 2560 )); then
+        # QHD/1440p display
+        dpi=144  # 1.5x scaling
+    elif (( width >= 1920 )); then
+        # Full HD display
+        dpi=96   # 1x scaling
+    fi
+    
+    echo "\$dpi"
+}
+
+# Detect and configure
+read -r SCREEN_WIDTH SCREEN_HEIGHT <<< "\$(detect_screen_resolution)"
+
+if (( SCREEN_WIDTH > 0 )); then
+    DETECTED_DPI=\$(calculate_dpi \$SCREEN_WIDTH \$SCREEN_HEIGHT)
+    info " * Detected screen: \${SCREEN_WIDTH}x\${SCREEN_HEIGHT}"
+    info " * Calculated DPI: \$DETECTED_DPI"
+    
+    # Update Xresources with detected DPI
+    XRESOURCES_FILE="/home/$PRIMARY_USER/.config/x11/xresources"
+    if [[ -f "\$XRESOURCES_FILE" ]]; then
+        # Update Xft.dpi setting
+        if grep -q "^Xft.dpi:" "\$XRESOURCES_FILE"; then
+            sed -i "s/^Xft.dpi:.*/Xft.dpi: \$DETECTED_DPI/" "\$XRESOURCES_FILE"
+        else
+            echo "Xft.dpi: \$DETECTED_DPI" >> "\$XRESOURCES_FILE"
+        fi
+        
+        # Update cursor size based on DPI
+        local cursor_size=24
+        (( DETECTED_DPI >= 192 )) && cursor_size=48
+        (( DETECTED_DPI >= 144 && DETECTED_DPI < 192 )) && cursor_size=32
+        
+        if grep -q "^Xcursor.size:" "\$XRESOURCES_FILE"; then
+            sed -i "s/^Xcursor.size:.*/Xcursor.size: \$cursor_size/" "\$XRESOURCES_FILE"
+        fi
+        
+        info " * Xresources updated: DPI=\$DETECTED_DPI, Cursor=\$cursor_size"
+    fi
+    
+    # Also update GDK/QT scaling environment variables
+    PROFILE_FILE="/home/$PRIMARY_USER/.config/shell/profile"
+    if [[ -f "\$PROFILE_FILE" ]] && (( DETECTED_DPI >= 144 )); then
+        local scale_factor=1
+        (( DETECTED_DPI >= 192 )) && scale_factor=2
+        (( DETECTED_DPI >= 144 && DETECTED_DPI < 192 )) && scale_factor=1.5
+        
+        # Add HiDPI environment variables if not present
+        if ! grep -q "GDK_SCALE" "\$PROFILE_FILE"; then
+            cat >> "\$PROFILE_FILE" << HIDPI_ENV
+
+# HiDPI scaling (auto-detected during installation)
+export GDK_SCALE=\$scale_factor
+export GDK_DPI_SCALE=\$(echo "scale=2; 1/\$scale_factor" | bc)
+export QT_AUTO_SCREEN_SCALE_FACTOR=1
+HIDPI_ENV
+            info " * HiDPI environment variables added to profile"
+        fi
+    fi
+else
+    info " * Could not detect screen resolution, using defaults"
+fi
+
+# ============================================================================
 # 10. Setup wallpaper (CRITICAL - setbg requires xwallpaper + bg file)
 # ============================================================================
 info "Setting up wallpaper..."
