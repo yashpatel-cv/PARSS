@@ -22,10 +22,12 @@ dwm starts automatically when you run `startx` after login.
 | `Super + q` | Close focused window |
 | `Super + j` | Focus next window |
 | `Super + k` | Focus previous window |
+| `Super + J` | Move window down in stack |
+| `Super + K` | Move window up in stack |
 | `Super + h` | Decrease master area size |
 | `Super + l` | Increase master area size |
-| `Super + Space` | Toggle focused window floating |
-| `Super + Shift + Space` | Toggle all windows floating |
+| `Super + Space` | Swap focused window with master |
+| `Super + Shift + Space` | Toggle floating for focused window |
 | `Super + s` | Toggle sticky (window visible on all tags) |
 | `Super + f` | Toggle fullscreen |
 | `Super + b` | Toggle status bar |
@@ -38,14 +40,23 @@ dwm starts automatically when you run `startx` after login.
 | `Super + Shift + t` | Bottom stack layout |
 | `Super + y` | Fibonacci spiral layout |
 | `Super + Shift + y` | Fibonacci dwindle layout |
-| `Super + u` | Centered master layout |
-| `Super + Shift + u` | Centered floating master |
-| `Super + i` | Increase number of master windows |
-| `Super + Shift + i` | Decrease number of master windows |
-| `Super + o` | Increase gaps |
-| `Super + Shift + o` | Decrease gaps |
-| `Super + a` | Toggle gaps |
+| `Super + u` | Deck layout |
+| `Super + Shift + u` | Monocle layout (fullscreen stack) |
+| `Super + i` | Centered master layout |
+| `Super + Shift + i` | Centered floating master layout |
+| `Super + Shift + f` | Floating layout |
+| `Super + o` | Increase number of master windows |
+| `Super + Shift + o` | Decrease number of master windows |
+
+### Gaps
+
+| Key | Action |
+|-----|--------|
+| `Super + a` | Toggle gaps on/off |
 | `Super + Shift + a` | Reset gaps to default |
+| `Super + z` | Increase gap size |
+| `Super + x` | Decrease gap size |
+| `Super + Shift + '` | Toggle smart gaps |
 
 ### Tags (Workspaces)
 
@@ -53,35 +64,46 @@ dwm starts automatically when you run `startx` after login.
 |-----|--------|
 | `Super + 1-9` | Switch to tag 1-9 |
 | `Super + Shift + 1-9` | Move window to tag 1-9 |
-| `Super + Tab` | Switch to previous tag |
 | `Super + 0` | View all tags |
 | `Super + Shift + 0` | Make window visible on all tags |
-| `Super + g` | Go to tag with urgent window |
+| `Super + Tab` | Switch to previous tag |
+| `Super + \` | Switch to previous tag |
+| `Super + g` | Go to previous tag (shiftview) |
+| `Super + ;` | Go to next tag (shiftview) |
+| `Super + Shift + g` | Move window to previous tag |
+| `Super + Shift + ;` | Move window to next tag |
+| `Super + Page Up` | Go to previous tag |
+| `Super + Page Down` | Go to next tag |
+| `Super + Shift + Page Up` | Move window to previous tag |
+| `Super + Shift + Page Down` | Move window to next tag |
 
 ### Multi-Monitor
 
 | Key | Action |
 |-----|--------|
-| `Super + .` | Focus next monitor |
-| `Super + ,` | Focus previous monitor |
-| `Super + Shift + .` | Move window to next monitor |
-| `Super + Shift + ,` | Move window to previous monitor |
+| `Super + Left` | Focus previous monitor |
+| `Super + Right` | Focus next monitor |
+| `Super + Shift + Left` | Move window to previous monitor |
+| `Super + Shift + Right` | Move window to next monitor |
 
 ### Program Launchers
 
 | Key | Action |
 |-----|--------|
 | `Super + d` | dmenu (application launcher) |
-| `Super + r` | lf (file manager) |
-| `Super + e` | neovim (text editor) |
+| `Super + r` | lf file manager |
+| `Super + Shift + r` | htop (system monitor) |
+| `Super + e` | neomutt (email client) |
+| `Super + Shift + e` | abook (address book) |
 | `Super + w` | Librewolf (web browser) |
+| `Super + Shift + w` | nmtui (network manager) |
+| `Super + n` | vimwiki (notes/wiki) |
+| `Super + Shift + n` | newsboat (RSS reader) |
 | `Super + m` | ncmpcpp (music player) |
-| `Super + n` | newsboat (RSS reader) |
-| `Super + Shift + n` | nmtui (network manager) |
-| `Super + Shift + w` | nmtui WiFi selection |
-| `Super + c` | calcurse (calendar) |
-| `Super + Shift + Enter` | Show/hide scratchpad terminal |
-| `Super + '` | Show/hide calculator scratchpad |
+| `Super + c` | profanity (XMPP chat) |
+| `Super + Shift + Enter` | Scratchpad terminal (toggle) |
+| `Super + '` | Calculator scratchpad (toggle) |
+| `Super + \`` | dmenuunicode (emoji picker) |
 
 ### Media/Audio
 
@@ -91,51 +113,69 @@ dwm starts automatically when you run `startx` after login.
 | `Super + Shift + -` | Volume down 15% |
 | `Super + =` | Volume up 5% |
 | `Super + Shift + =` | Volume up 15% |
-| `Super + Shift + m` | Mute audio |
-| `Super + p` | Pause/play mpd music |
-| `Super + .` | Next track |
+| `Super + Shift + m` | Mute/unmute audio |
+| `Super + p` | Toggle mpd play/pause |
+| `Super + Shift + p` | Pause mpd and all mpv instances |
 | `Super + ,` | Previous track |
+| `Super + Shift + ,` | Seek to 0% (restart track) |
+| `Super + .` | Next track |
+| `Super + Shift + .` | Toggle repeat mode |
 | `Super + [` | Seek back 10 seconds |
 | `Super + ]` | Seek forward 10 seconds |
 | `Super + Shift + [` | Seek back 1 minute |
 | `Super + Shift + ]` | Seek forward 1 minute |
 
+### Media Keys (Laptop/Keyboard)
+
+| Key | Action |
+|-----|--------|
+| `Audio Mute` | Mute/unmute |
+| `Audio Raise/Lower` | Volume up/down |
+| `Audio Play/Pause` | Toggle playback |
+| `Audio Next/Prev` | Next/previous track |
+| `Audio Rewind/Forward` | Seek ±10 seconds |
+| `Calculator` | Open bc calculator |
+| `WWW` | Open browser |
+| `Mail` | Open email client |
+| `Screen Saver` | Lock screen |
+
 ### Screenshots & Recording
 
 | Key | Action |
 |-----|--------|
-| `Print` | Screenshot selection |
+| `Print` | Screenshot full screen |
 | `Shift + Print` | Screenshot menu (maimpick) |
-| `Super + Print` | Record screen (dmenurecord) |
+| `Super + Print` | Screen recording menu |
+| `Super + Shift + Print` | Stop recording |
 | `Super + Delete` | Stop recording |
-| `Super + Scroll Lock` | Toggle screenkey |
+| `Super + Scroll Lock` | Toggle screenkey display |
+
+### Function Keys
+
+| Key | Action |
+|-----|--------|
+| `Super + F1` | Show keybindings help (PDF) |
+| `Super + F2` | Tutorial videos |
+| `Super + F3` | Display select (multi-monitor) |
+| `Super + F4` | Pulsemixer (audio control) |
+| `Super + F5` | Reload Xresources |
+| `Super + F6` | Tor browser wrapper |
+| `Super + F7` | Transmission toggle |
+| `Super + F8` | Mail sync |
+| `Super + F9` | Mount drives (mounter) |
+| `Super + F10` | Unmount drives |
+| `Super + F11` | View webcam |
+| `Super + F12` | Rerun keyboard remaps |
 
 ### System
 
 | Key | Action |
 |-----|--------|
-| `Super + F1` | Show keybindings help |
-| `Super + F2` | Watch tutorial videos |
-| `Super + F3` | Display select (multi-monitor) |
-| `Super + F4` | Suspend/hibernate menu |
-| `Super + F9` | Mount USB/external drives |
-| `Super + F10` | Unmount drives |
-| `Super + F11` | View webcam |
-| `Super + F12` | Rerun keyboard remaps |
-| `Super + Backspace` | System power menu |
-| `Super + Shift + Backspace` | Force kill dwm |
-| `Super + Shift + q` | Quit dwm |
-| `Super + x` | Lock screen (slock) |
-| `Super + Shift + x` | Shutdown menu |
-
-### Clipboard & Utilities
-
-| Key | Action |
-|-----|--------|
-| `Super + Insert` | Show clipboard contents |
+| `Super + Backspace` | System action menu (shutdown, reboot, etc.) |
+| `Super + Shift + Backspace` | System action menu |
+| `Super + Shift + q` | System action menu |
 | `Super + Shift + d` | passmenu (password manager) |
-| `Super + `\`` | Select emoji/unicode |
-| `Super + Shift + `\`` | Insert emoji |
+| `Super + Insert` | Insert snippet from dmenu |
 
 ## Customization
 
@@ -146,7 +186,7 @@ cd ~/.local/src/dwm
 sudo make clean install
 ```
 
-Then restart dwm with `Super + Shift + q`.
+Then press `Super + Shift + q` to logout and restart dwm.
 
 ## Source Code
 
