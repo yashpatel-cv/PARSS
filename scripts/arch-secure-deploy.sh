@@ -1459,7 +1459,7 @@ phase_8_chroot_configuration() {
     arch-chroot "$MOUNT_ROOT" grub-install \
         --target=x86_64-efi \
         --efi-directory=/boot \
-        --bootloader-id=ArchLinux \
+        --bootloader-id="devta linux" \
         --recheck 2>&1 | tee -a "$LOG_FILE"
 
     if [[ $? -ne 0 ]]; then
