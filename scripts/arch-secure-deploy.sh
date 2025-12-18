@@ -1627,6 +1627,37 @@ EOF
     log_info "Enabling NetworkManager..."
     arch-chroot "$MOUNT_ROOT" systemctl enable NetworkManager
 
+    # =======================================================================
+    # WIFI CREDENTIAL PERSISTENCE - Copy WiFi connections from installation media
+    # This allows the user to connect to WiFi on first boot without reconfiguring
+    # =======================================================================
+    log_info "Copying WiFi credentials from installation media..."
+
+    # NetworkManager stores connections in /etc/NetworkManager/system-connections/
+    local nm_live_dir="/etc/NetworkManager/system-connections"
+    local nm_target_dir="$MOUNT_ROOT/etc/NetworkManager/system-connections"
+
+    if [[ -d "$nm_live_dir" ]] && [[ -n "$(ls -A "$nm_live_dir" 2>/dev/null)" ]]; then
+        mkdir -p "$nm_target_dir"
+        cp -a "$nm_live_dir"/* "$nm_target_dir"/ 2>/dev/null || true
+        # Ensure correct permissions (600 required for connection files)
+        chmod 600 "$nm_target_dir"/* 2>/dev/null || true
+        local wifi_count=$(ls -1 "$nm_target_dir"/*.nmconnection 2>/dev/null | wc -l)
+        log_success "Copied $wifi_count WiFi connection(s) to new system"
+    else
+        log_info "No WiFi connections found on installation media to copy"
+    fi
+
+    # Also try iwd connections (alternative WiFi backend)
+    local iwd_live_dir="/var/lib/iwd"
+    local iwd_target_dir="$MOUNT_ROOT/var/lib/iwd"
+
+    if [[ -d "$iwd_live_dir" ]] && [[ -n "$(ls -A "$iwd_live_dir" 2>/dev/null)" ]]; then
+        mkdir -p "$iwd_target_dir"
+        cp -a "$iwd_live_dir"/* "$iwd_target_dir"/ 2>/dev/null || true
+        log_success "Copied iwd WiFi credentials to new system"
+    fi
+
     # SSH - Remote access
     log_info "Enabling SSH service..."
     arch-chroot "$MOUNT_ROOT" systemctl enable sshd
@@ -2367,7 +2398,78 @@ echo "kernel.dmesg_restrict = 0" > /etc/sysctl.d/dmesg.conf
 info " * Kernel settings configured"
 
 # ============================================================================
-# 19. Final ownership fix
+# 19. ThinkPad Fan Control (for P1 Gen5 and other ThinkPads)
+# ============================================================================
+info "Configuring ThinkPad fan control..."
+
+# Enable thinkpad_acpi fan control
+mkdir -p /etc/modprobe.d
+cat > /etc/modprobe.d/thinkpad_acpi.conf << 'THINKPAD_ACPI'
+# Enable fan control for ThinkPad laptops
+options thinkpad_acpi fan_control=1 experimental=1
+THINKPAD_ACPI
+
+# Create thinkfan configuration for ThinkPad P1 Gen5 (aggressive cooling)
+if command -v thinkfan >/dev/null 2>&1; then
+    cat > /etc/thinkfan.conf << 'THINKFAN_CONF'
+##############################################################################
+# ThinkPad P1 Gen5 Fan Configuration - Aggressive Cooling
+# Optimized for preventing thermal throttling after thermal paste change
+##############################################################################
+
+sensors:
+  # Try thinkpad-specific sensor first
+  - tpacpi: /proc/acpi/ibm/thermal
+    indices: [0, 1, 2, 3, 4, 5, 6, 7]
+    correction: [0, 0, 0, 0, 0, 0, 0, 0]
+
+  # Fallback to hwmon sensors if tpacpi not available
+  # - hwmon: /sys/devices/virtual/thermal/thermal_zone0/temp
+
+fans:
+  - tpacpi: /proc/acpi/ibm/fan
+
+levels:
+  # Aggressive cooling profile for P1 Gen5 (runs hot with dGPU)
+  # Format: [fan_level, low_temp, high_temp]
+  - [0,      0,    45]    # Fan off below 45°C
+  - [1,     42,    50]    # Level 1: 42-50°C
+  - [2,     47,    55]    # Level 2: 47-55°C
+  - [3,     52,    60]    # Level 3: 52-60°C
+  - [4,     57,    65]    # Level 4: 57-65°C
+  - [5,     62,    70]    # Level 5: 62-70°C
+  - [6,     67,    75]    # Level 6: 67-75°C
+  - [7,     72,    80]    # Level 7: 72-80°C (max regulated)
+  - ["level full-speed", 77, 32767]  # Full speed above 77°C
+THINKFAN_CONF
+
+    # Enable thinkfan service
+    systemctl enable thinkfan.service 2>/dev/null || true
+    info " * ThinkPad fan control configured (thinkfan)"
+else
+    info " * thinkfan not installed, skipping fan config"
+fi
+
+# Enable thermald for Intel thermal management
+if command -v thermald >/dev/null 2>&1; then
+    systemctl enable thermald.service 2>/dev/null || true
+    info " * Intel thermal daemon enabled"
+fi
+
+# Enable TLP for power management
+if command -v tlp >/dev/null 2>&1; then
+    systemctl enable tlp.service 2>/dev/null || true
+    systemctl mask systemd-rfkill.service 2>/dev/null || true
+    systemctl mask systemd-rfkill.socket 2>/dev/null || true
+    info " * TLP power management enabled"
+fi
+
+# Enable acpid for ACPI events
+systemctl enable acpid.service 2>/dev/null || true
+info " * ACPI event handler enabled"
+
+# ============================================================================
+# 20. Final ownership fix
 # ============================================================================
 info "Fixing file ownership..."
 chown -R $PRIMARY_USER:wheel "/home/$PRIMARY_USER" 2>/dev/null || true

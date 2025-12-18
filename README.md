@@ -192,7 +192,137 @@ PARSS is designed for **security-focused, repeatable installs** with optional de
 
 ---
 
-## 6. Documentation Layout
+## 6. Troubleshooting: Arch-Chroot for BTRFS + Encrypted Systems
+
+If you need to troubleshoot or repair your PARSS installation from a live Arch ISO, follow these steps to properly mount and chroot into your encrypted BTRFS system.
+
+### Step 1: Boot from Arch ISO
+
+Boot from the same Arch installation media used during setup.
+
+### Step 2: Unlock the Encrypted Root Partition
+
+```bash
+# Find your encrypted partition (usually the largest partition on your disk)
+lsblk
+
+# Unlock the LUKS partition (replace /dev/nvme0n1p2 with your root partition)
+cryptsetup luksOpen /dev/nvme0n1p2 cryptroot
+
+# If you have a separate encrypted home:
+cryptsetup luksOpen /dev/nvme0n1p3 crypthome
+```
+
+### Step 3: Mount BTRFS Subvolumes
+
+```bash
+# Create mount point
+mkdir -p /mnt
+
+# Mount the root subvolume first
+mount -o subvol=@,compress=zstd /dev/mapper/cryptroot /mnt
+
+# Mount the remaining subvolumes
+mount -o subvol=@home,compress=zstd /dev/mapper/cryptroot /mnt/home
+mount -o subvol=@var,compress=zstd /dev/mapper/cryptroot /mnt/var
+mount -o subvol=@snapshots,compress=zstd /dev/mapper/cryptroot /mnt/.snapshots
+
+# Mount the EFI partition (replace /dev/nvme0n1p1 with your EFI partition)
+mount /dev/nvme0n1p1 /mnt/boot/efi
+```
+
+### Step 4: Chroot into the System
+
+```bash
+# Use arch-chroot (handles /dev, /proc, /sys automatically)
+arch-chroot /mnt
+
+# You're now inside your installed system as root
+# Run any repairs, reinstall packages, regenerate initramfs, etc.
+```
+
+### Common Repair Tasks
+
+```bash
+# Regenerate initramfs (if boot issues)
+mkinitcpio -P
+
+# Reinstall GRUB (if bootloader issues)
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=GRUB
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# Reinstall a package
+pacman -S <package-name>
+
+# Check filesystem
+btrfs check /dev/mapper/cryptroot
+
+# View BTRFS subvolumes
+btrfs subvolume list /
+```
+
+### Step 5: Exit and Reboot
+
+```bash
+# Exit chroot
+exit
+
+# Unmount everything
+umount -R /mnt
+
+# Close encrypted volumes
+cryptsetup luksClose cryptroot
+cryptsetup luksClose crypthome  # if applicable
+
+# Reboot
+reboot
+```
+
+### Quick Reference: PARSS Default Layout
+
+| Mount Point | BTRFS Subvolume | Purpose |
+|-------------|-----------------|---------|
+| `/` | `@` | Root filesystem |
+| `/home` | `@home` | User data |
+| `/var` | `@var` | Variable data, logs |
+| `/.snapshots` | `@snapshots` | BTRFS snapshots |
+| `/boot/efi` | (EFI partition) | UEFI bootloader |
+
+---
+
+## 7. Laptop/ThinkPad Support
+
+PARSS includes special support for ThinkPad laptops (especially P1 Gen5 which is known for thermal issues):
+
+### Packages Installed
+- **thinkfan** — Intelligent fan control daemon
+- **lm_sensors** — Hardware temperature monitoring
+- **thermald** — Intel thermal daemon (prevents CPU throttling)
+- **tlp** — Battery/power optimization
+- **acpid** — ACPI event handling (lid close, power button)
+
+### Fan Control Configuration
+
+PARSS creates an aggressive cooling profile at `/etc/thinkfan.conf` optimized for ThinkPad P1 Gen5:
+- Fan activates earlier (45°C instead of default 55°C)
+- Full speed at 77°C (before thermal throttling kicks in at 80°C+)
+- Supports both discrete GPU and CPU cooling
+
+To adjust fan thresholds after installation:
+```bash
+sudo nvim /etc/thinkfan.conf
+sudo systemctl restart thinkfan
+```
+
+To monitor temperatures:
+```bash
+sensors              # Current temps
+watch -n 1 sensors   # Live monitoring
+```
+
+---
+
+## 8. Documentation Layout
 
 To avoid duplicated information, PARSS intentionally keeps docs minimal:
 
@@ -206,7 +336,7 @@ Older standalone guides have been merged into `PARSS-MANUAL.md` and removed.
 
 ---
 
-## 7. Licensing and Attribution
+## 9. Licensing and Attribution
 
 PARSS is built with:
 
