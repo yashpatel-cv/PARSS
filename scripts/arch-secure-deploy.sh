@@ -1459,7 +1459,7 @@ phase_8_chroot_configuration() {
     arch-chroot "$MOUNT_ROOT" grub-install \
         --target=x86_64-efi \
         --efi-directory=/boot \
-        --bootloader-id="devta linux" \
+        --bootloader-id="Devta-Arch" \
         --recheck 2>&1 | tee -a "$LOG_FILE"
 
     if [[ $? -ne 0 ]]; then
@@ -2052,7 +2052,7 @@ putgitrepo() {
     chown $PRIMARY_USER:wheel "\$tmpdir" "\$dest"
 
     # CRITICAL: Use --recursive and --recurse-submodules for git submodules
-    sudo -u $PRIMARY_USER git -C "$REPODIR" clone --depth 1 \
+    sudo -u $PRIMARY_USER git clone --depth 1 \
         --single-branch --no-tags -q --recursive -b "\$branch" \
         --recurse-submodules "\$repo" "\$tmpdir" || {
         warn "Failed to clone dotfiles"
