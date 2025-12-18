@@ -1628,6 +1628,45 @@ EOF
     arch-chroot "$MOUNT_ROOT" systemctl enable NetworkManager
 
     # =======================================================================
+    # WIFI FIX: Ensure WiFi adapter is not blocked and wpa_supplicant works
+    # Common issue: WiFi shows only "lo" adapter because device is rfkill blocked
+    # =======================================================================
+    log_info "Configuring WiFi support..."
+
+    # Enable wpa_supplicant (NetworkManager uses it for WPA/WPA2 WiFi)
+    arch-chroot "$MOUNT_ROOT" systemctl enable wpa_supplicant 2>/dev/null || true
+
+    # Create rfkill unblock script to run at boot (fixes soft-blocked WiFi)
+    mkdir -p "$MOUNT_ROOT/etc/NetworkManager/dispatcher.d/pre-up.d" 2>/dev/null || true
+    cat > "$MOUNT_ROOT/etc/NetworkManager/dispatcher.d/pre-up.d/10-rfkill-unblock" << 'RFKILL_SCRIPT'
+#!/bin/sh
+# Unblock WiFi if it's soft-blocked (common issue after fresh install)
+rfkill unblock wifi 2>/dev/null || true
+rfkill unblock wlan 2>/dev/null || true
+RFKILL_SCRIPT
+    chmod +x "$MOUNT_ROOT/etc/NetworkManager/dispatcher.d/pre-up.d/10-rfkill-unblock" 2>/dev/null || true
+
+    # Also create a systemd service to unblock rfkill at boot
+    cat > "$MOUNT_ROOT/etc/systemd/system/rfkill-unblock.service" << 'RFKILL_SERVICE'
+[Unit]
+Description=Unblock WiFi rfkill
+Before=NetworkManager.service
+After=systemd-rfkill.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/rfkill unblock wifi
+ExecStart=/usr/bin/rfkill unblock wlan
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+RFKILL_SERVICE
+    arch-chroot "$MOUNT_ROOT" systemctl enable rfkill-unblock.service 2>/dev/null || true
+
+    log_success "WiFi support configured (rfkill unblock + wpa_supplicant)"
+
+    # =======================================================================
     # WIFI CREDENTIAL PERSISTENCE - Copy WiFi connections from installation media
     # This allows the user to connect to WiFi on first boot without reconfiguring
     # =======================================================================
